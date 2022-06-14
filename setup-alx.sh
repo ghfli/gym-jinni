@@ -12,10 +12,10 @@ pacman -S --needed --noconfirm base-devel go git
 if which yay ; then
     echo yay has been installed.
 else
-    echo installing yay, a aur helper...
-    curl -O https://aur.archlinux.org/cgit/aur.git/snapshot/yay.tar.gz
-    tar xvf yay.tar.gz
-    cd yay && sudo -u vagrant makepkg -fsrCc && pacman --noconfirm -U yay.*.zst
+    echo installing yay, an aur helper...
+    sudo -u vagrant curl -O https://aur.archlinux.org/cgit/aur.git/snapshot/yay.tar.gz && \
+    sudo -u vagrant tar xvf yay.tar.gz && \
+    cd yay && sudo -u vagrant makepkg -fsrCc && pacman --noconfirm -U yay*.zst
 fi
 
 if which snap ; then
@@ -36,6 +36,6 @@ else
 fi
 
 echo installing any other optional packages you like...
-pacman -S --needed --noconfirm darkhttpd vim screen
+pacman -S --needed --noconfirm darkhttpd vim screen man-db
 
 echo done.

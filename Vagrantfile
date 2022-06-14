@@ -78,6 +78,13 @@ Vagrant.configure("2") do |config|
       dom.random :model => 'random'
     end
 
+    config.vm.provider "virtualbox" do |vb|
+      # Display the VirtualBox GUI when booting the machine
+      vb.gui = true
+      vb.cpus = 2
+      vb.memory = "1024"
+    end
+
     alx.vm.network "forwarded_port", guest: 22, host: 2222
     alx.vm.network "forwarded_port", guest: 8080, host: 8080
     alx.vm.synced_folder ".", "/vagrant", type: "nfs", nfs_udp: false, nfs_version: 4
