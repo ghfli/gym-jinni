@@ -24,8 +24,8 @@
 "
 "------------------vim基本属性配置
 set nocompatible " be iMproved
-set exrc         " run .vimrc in the local directory
-colorscheme ron
+" set exrc         " run .vimrc in the local directory
+" colorscheme ron
 set number       " 显示行号
 set confirm      " 在处理未保存或只读文件的时候，弹出确认
 
@@ -291,6 +291,10 @@ Plug 'honza/vim-snippets'
 
 " support dart files
 Plug 'dart-lang/dart-vim-plugin'
+
+" database markup language
+Plug 'jidn/vim-dbml'
+
 call plug#end()
 
 " run :PlugInstall after adding new plugins above

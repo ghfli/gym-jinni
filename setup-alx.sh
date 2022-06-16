@@ -1,5 +1,6 @@
 #!/bin/bash
 set -e # exit immediately if a command fails
+echo PATH=$PATH PWD=$(pwd) whoami=$(whoami)
 
 installed () {
     type $1
@@ -39,11 +40,14 @@ if ! installed flutter ; then
 fi
 
 echo installing any other optional packages you like...
-pacman -S --needed --noconfirm darkhttpd vim screen man-db npm
+pacman -S --needed --noconfirm darkhttpd vim screen man-db npm docker protobuf
+
 if ! installed dbdocs ; then
+    echo installing dbdocs...
     npm install -g dbdocs
 fi
 if ! installed dbml2sql ; then
+    echo installing dbml2sql...
     npm install -g @dbml/cli
 fi
 
@@ -53,16 +57,33 @@ install-db-migrate () {
     tarfn=migrate.$platform-amd64.tar.gz
     url=https://github.com/golang-migrate/migrate/releases/download/$version/$tarfn
     dst=/home/vagrant/migrate-$version
-    echo download $url to $dst...
+    echo downloading $url to $dst...
     sudo -u vagrant mkdir -p $dst && cd $dst && \
         sudo -u vagrant curl -OL $url && \
         sudo -u vagrant tar xvzf $tarfn
-    echo link $dst/migrate to /usr/local/bin/...
+    echo linking $dst/migrate to /usr/local/bin/...
     ln -sf $dst/migrate /usr/local/bin
 }
-
 if ! installed migrate ; then
+    echo installing migrate...
     install-db-migrate
 fi
 
-echo done. remember to fix any errors manually on the vm.
+if ! installed sqlc ; then
+    echo installing sqlc...
+    sudo -u vagrant go install github.com/kyleconroy/sqlc/cmd/sqlc@latest
+    ln -sf /home/vagrant/go/bin/sqlc /usr/local/bin
+fi
+
+if ! installed mockgen ; then
+    echo installing mockgen...
+    sudo -u vagrant go install github.com/golang/mock/mockgen@v1.6.0
+    ln -sf /home/vagrant/go/bin/mockgen /usr/local/bin
+fi
+
+if ! [ -e /home/vagrant/.vimrc ] ; then
+    echo linking /vagrant/.vimrc to /home/vagrant...
+    sudo -u vagrant ln -sf /vagrant/.vimrc /home/vagrant
+fi
+
+echo done, remember to fix errors if any.
