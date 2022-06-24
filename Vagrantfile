@@ -71,23 +71,27 @@ Vagrant.configure("2") do |config|
     alx.vm.box = "archlinux/archlinux"
 
     # See details at https://github.com/vagrant-libvirt/vagrant-libvirt.
-    alx.vm.provider :libvirt do |dom|
+    alx.vm.provider :libvirt do |dom, override|
       dom.cpus = 2          # default to 1
-      dom.memory = "1024"   # default to 512M
+      dom.memory = "2048"   # default to 512M
       # Pass through /dev/random from the host to the VM
       dom.random :model => 'random'
+
+      override.vm.synced_folder ".", "/vagrant", type: "nfs", nfs_udp: false, nfs_version: 4
     end
 
-    config.vm.provider "virtualbox" do |vb|
+    alx.vm.provider "virtualbox" do |vb, override|
       # Display the VirtualBox GUI when booting the machine
       vb.gui = true
       vb.cpus = 2
-      vb.memory = "1024"
+      vb.memory = "2048"
+
+      override.vm.synced_folder ".", "/vagrant", type: "virtualbox"
     end
 
     alx.vm.network "forwarded_port", guest: 22, host: 2222
     alx.vm.network "forwarded_port", guest: 8080, host: 8080
-    alx.vm.synced_folder ".", "/vagrant", type: "nfs", nfs_udp: false, nfs_version: 4
+
     alx.vm.provision "setup-alx", type: "shell", path: "setup-alx.sh"
     # alx.vm.provision "file", source: "~/.gitconfig", destination: ".gitconfig"
   end
