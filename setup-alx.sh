@@ -40,7 +40,7 @@ if ! installed flutter ; then
 fi
 
 echo installing any other optional packages you like...
-pacman -S --needed --noconfirm darkhttpd vim screen man-db npm docker protobuf
+pacman -S --needed --noconfirm darkhttpd vim screen man-db npm docker protobuf ctags
 
 if ! installed dbdocs ; then
     echo installing dbdocs...
@@ -84,6 +84,17 @@ fi
 if ! [ -e /home/vagrant/.vimrc ] ; then
     echo linking /vagrant/.vimrc to /home/vagrant...
     sudo -u vagrant ln -sf /vagrant/.vimrc /home/vagrant
+fi
+
+if ! [ -e /home/vagrant/.screenrc ] ; then
+    echo linking /vagrant/.screenrc to /home/vagrant...
+    sudo -u vagrant ln -sf /vagrant/.screenrc /home/vagrant
+fi
+
+if ! [ -e /home/vagrant/.bashrc.tail ] ; then
+    echo linking /vagrant/.bashrc.tail to /home/vagrant...
+    sudo -u vagrant ln -sf /vagrant/.bashrc.tail /home/vagrant
+    sudo -u vagrant echo '[ -f ~/.bashrc.tail ] && . ~/.bashrc.tail' >> /home/vagrant/.bashrc
 fi
 
 echo done, remember to fix errors if any.
