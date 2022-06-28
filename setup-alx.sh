@@ -19,7 +19,8 @@ pacman -S --needed --noconfirm base-devel go git
 
 if ! installed yay ; then
     echo installing yay, an aur helper...
-    sudo -u vagrant curl -O https://aur.archlinux.org/cgit/aur.git/snapshot/yay.tar.gz && \
+    sudo -u vagrant curl -O \
+	    https://aur.archlinux.org/cgit/aur.git/snapshot/yay.tar.gz && \
         sudo -u vagrant tar xvzf yay.tar.gz && \
         cd yay && \
         sudo -u vagrant makepkg -fsrCc && \
@@ -40,7 +41,8 @@ if ! installed flutter ; then
 fi
 
 echo installing any other optional packages you like...
-pacman -S --needed --noconfirm darkhttpd vim screen man-db npm docker protobuf ctags
+pacman -S --needed --noconfirm darkhttpd vim screen man-db npm docker \
+    protobuf ctags github-cli
 
 if ! installed dbdocs ; then
     echo installing dbdocs...
@@ -51,7 +53,9 @@ if ! installed dbml2sql ; then
     npm install -g @dbml/cli
 fi
 
-install-db-migrate () {
+install_db_migrate () {
+    installed migrate && return
+    echo installing migrate...
     version=${1:-v4.15.2}
     platform=${2:-linux}
     tarfn=migrate.$platform-amd64.tar.gz
@@ -64,37 +68,31 @@ install-db-migrate () {
     echo linking $dst/migrate to /usr/local/bin/...
     ln -sf $dst/migrate /usr/local/bin
 }
-if ! installed migrate ; then
-    echo installing migrate...
-    install-db-migrate
-fi
+install_db_migrate
 
-if ! installed sqlc ; then
-    echo installing sqlc...
-    sudo -u vagrant go install github.com/kyleconroy/sqlc/cmd/sqlc@latest
-    ln -sf /home/vagrant/go/bin/sqlc /usr/local/bin
-fi
-
-if ! installed mockgen ; then
-    echo installing mockgen...
-    sudo -u vagrant go install github.com/golang/mock/mockgen@v1.6.0
-    ln -sf /home/vagrant/go/bin/mockgen /usr/local/bin
-fi
-
-if ! [ -e /home/vagrant/.vimrc ] ; then
-    echo linking /vagrant/.vimrc to /home/vagrant...
-    sudo -u vagrant ln -sf /vagrant/.vimrc /home/vagrant
-fi
-
-if ! [ -e /home/vagrant/.screenrc ] ; then
-    echo linking /vagrant/.screenrc to /home/vagrant...
-    sudo -u vagrant ln -sf /vagrant/.screenrc /home/vagrant
-fi
+go_install () {
+    url=$1
+    cmd=$(basename $url)
+    installed $cmd && return
+    version=${2:-latest}
+    echo installing $cmd@$version...
+    sudo -u vagrant go install $url@$version
+    ln -sf /home/vagrant/go/bin/$cmd /usr/local/bin
+}
+go_install github.com/kyleconroy/sqlc/cmd/sqlc
+go_install google.golang.org/protobuf/cmd/protoc-gen-go
+go_install google.golang.org/grpc/cmd/protoc-gen-go-grpc
+go_install github.com/golang/mock/mockgen v1.6.0
 
 if ! [ -e /home/vagrant/.bashrc.tail ] ; then
-    echo linking /vagrant/.bashrc.tail to /home/vagrant...
-    sudo -u vagrant ln -sf /vagrant/.bashrc.tail /home/vagrant
     sudo -u vagrant echo '[ -f ~/.bashrc.tail ] && . ~/.bashrc.tail' >> /home/vagrant/.bashrc
 fi
+
+for rc in .vimrc .screenrc .bashrc.tail ; do
+    if ! [ -e /home/vagrant/$rc ] ; then
+        echo linking /vagrant/$rc to /home/vagrant...
+        sudo -u vagrant ln -sf /vagrant/$rc /home/vagrant
+    fi
+done
 
 echo done, remember to fix errors if any.
