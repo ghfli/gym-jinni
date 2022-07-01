@@ -95,4 +95,24 @@ for rc in .vimrc .screenrc .bashrc.tail ; do
     fi
 done
 
+if ! installed brew ; then
+    echo installing brew...
+    sudo -u vagrant /bin/bash -c \
+	    "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+    sudo -u vagrant echo 'eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"' >> /home/vagrant/.bash_profile
+    eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+fi
+
+if ! installed buf ; then
+    echo installing buf...
+    sudo -u vagrant brew install bufbuild/buf/buf
+fi
+
+if ! installed jq ; then
+    echo installing jq...
+    curl -fsSL https://github.com/stedolan/jq/releases/download/jq-1.6/jq-linux64 \
+	--output-dir /usr/local/bin -o jq
+    chmod +x /usr/local/bin/jq
+fi
+
 echo done, remember to fix errors if any.

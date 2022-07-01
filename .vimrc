@@ -256,6 +256,13 @@ inoremap " ""<Esc>i
 inoremap ' ''<Esc>i
 inoremap ` ``<Esc>i
 
+" buf linter
+let g:ale_linters = {
+\   'proto': ['buf-lint',],
+\}
+let g:ale_lint_on_text_changed = 'never'
+let g:ale_linters_explicit = 1
+
 " vim-plug是插件管理工具
 " automatically install vim-plug if it's not installed
 let data_dir = has('nvim') ? stdpath('data') . '/site' : '~/.vim'
@@ -294,6 +301,10 @@ Plug 'dart-lang/dart-vim-plugin'
 
 " database markup language
 Plug 'jidn/vim-dbml'
+
+" support buf
+Plug 'dense-analysis/ale'
+Plug 'bufbuild/vim-buf'
 
 call plug#end()
 
