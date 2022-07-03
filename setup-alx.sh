@@ -41,6 +41,7 @@ if ! installed flutter ; then
 fi
 
 echo installing any other optional packages you like...
+# pacman -D --noconfirm npm && rm -rf /usr/lib/node_modules/npm
 pacman -S --needed --noconfirm darkhttpd vim screen man-db npm docker \
     protobuf ctags github-cli
 
@@ -82,6 +83,7 @@ go_install () {
 go_install github.com/kyleconroy/sqlc/cmd/sqlc
 go_install google.golang.org/protobuf/cmd/protoc-gen-go
 go_install google.golang.org/grpc/cmd/protoc-gen-go-grpc
+go_install github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-grpc-gateway
 go_install github.com/golang/mock/mockgen v1.6.0
 
 if ! [ -e /home/vagrant/.bashrc.tail ] ; then
@@ -94,5 +96,25 @@ for rc in .vimrc .screenrc .bashrc.tail ; do
         sudo -u vagrant ln -sf /vagrant/$rc /home/vagrant
     fi
 done
+
+if ! installed brew ; then
+    echo installing brew...
+    sudo -u vagrant /bin/bash -c \
+	    "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+    sudo -u vagrant echo 'eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"' >> /home/vagrant/.bash_profile
+    eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+fi
+
+if ! installed buf ; then
+    echo installing buf...
+    sudo -u vagrant brew install bufbuild/buf/buf
+fi
+
+if ! installed jq ; then
+    echo installing jq...
+    curl -fsSL https://github.com/stedolan/jq/releases/download/jq-1.6/jq-linux64 \
+	--output-dir /usr/local/bin -o jq
+    chmod +x /usr/local/bin/jq
+fi
 
 echo done, remember to fix errors if any.
