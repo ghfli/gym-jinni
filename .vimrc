@@ -306,6 +306,9 @@ Plug 'jidn/vim-dbml'
 Plug 'dense-analysis/ale'
 Plug 'bufbuild/vim-buf'
 
+" bufexplorer
+Plug 'jlanzarotta/bufexplorer'
+
 call plug#end()
 
 " run :PlugInstall after adding new plugins above

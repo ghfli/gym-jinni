@@ -1,0 +1,102 @@
+
+syntax="proto3";
+
+package user.v1;
+
+import "google/type/datetime.proto";
+import "google/api/annotations.proto";
+
+message User {
+    uint32  id = 1;
+    string email = 2;
+    string phone = 3;
+    string name = 4;
+    string passwd = 5;
+}
+
+message CreateUserRequest {
+    User user = 1;
+}
+
+message CreateUserResponse {
+    User user = 1;
+}
+
+message LoginUserRequest {
+    User user = 1;
+}
+
+message LoginUserResponse {
+    User user = 1;
+    string session_id = 2;
+    string access_tkn = 3;
+    string refresh_tkn = 4;
+    google.type.DateTime access_tkn_exp_at = 5;
+    google.type.DateTime refresh_tkn_exp_at = 6;
+}
+
+message GetUserRequest {
+    User user = 1;
+    string session_id = 2;
+    string access_tkn = 3;
+}
+
+message GetUserResponse {
+    User user = 1;
+    google.type.DateTime created_at = 2;
+    bool email_verified = 3;
+    bool phone_verified = 4;
+    google.type.DateTime passwd_changed_at = 5;
+}
+
+message UpdateUserRequest {
+    User user = 1;
+    string session_id = 2;
+    string access_tkn = 3;
+    string new_passwd = 4;
+}
+
+message UpdateUserResponse {
+    User user = 1;
+}
+
+message DeleteUserRequest {
+    User user = 1;
+    string session_id = 2;
+    string access_tkn = 3;
+}
+
+message DeleteUserResponse {
+    User user = 1;
+}
+
+message LogoutUserRequest {
+    User user = 1;
+    string session_id = 2;
+    string access_tkn = 3;
+}
+
+message LogoutUserResponse {
+    User user = 1;
+    string session_id = 2;
+}
+
+service UserMgtService {
+    rpc CreateUser (CreateUserRequest) returns (CreateUserResponse) {
+        option (google.api.http) = {
+            post: "/v1/create_user"
+            body: "*"
+        };
+    }
+    rpc LoginUser (LoginUserRequest) returns (LoginUserResponse) {
+        option (google.api.http) = {
+            post: "/v1/login_user"
+            body: "*"
+        };
+    }
+    rpc GetUser (GetUserRequest) returns (GetUserResponse) {}
+    rpc UpdateUser (UpdateUserRequest) returns (UpdateUserResponse) {}
+    // rpc RenewAccTkn (RenewAccTknReq) returns (RenewAccTknResponse) {}
+    rpc DeleteUser (DeleteUserRequest) returns (DeleteUserResponse) {}
+    rpc LogoutUser (LogoutUserRequest) returns (LogoutUserResponse) {}
+}

@@ -41,6 +41,7 @@ if ! installed flutter ; then
 fi
 
 echo installing any other optional packages you like...
+# pacman -D --noconfirm npm && rm -rf /usr/lib/node_modules/npm
 pacman -S --needed --noconfirm darkhttpd vim screen man-db npm docker \
     protobuf ctags github-cli
 
@@ -82,6 +83,7 @@ go_install () {
 go_install github.com/kyleconroy/sqlc/cmd/sqlc
 go_install google.golang.org/protobuf/cmd/protoc-gen-go
 go_install google.golang.org/grpc/cmd/protoc-gen-go-grpc
+go_install github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-grpc-gateway
 go_install github.com/golang/mock/mockgen v1.6.0
 
 if ! [ -e /home/vagrant/.bashrc.tail ] ; then
