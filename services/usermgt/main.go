@@ -1,8 +1,8 @@
-package usermgt
+package usermgtv1
 
 import (
 	"context"
-	userv1 "github.com/ghfli/gym-jinni/services/gen/proto/go/user/v1"
+	usermgtv1 "github.com/ghfli/gym-jinni/services/gen/go/usermgt/v1"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	grpc "google.golang.org/grpc"
 	"log"
@@ -10,24 +10,24 @@ import (
 )
 
 type userMgtServiceServer struct {
-	userv1.UnimplementedUserMgtServiceServer
+	usermgtv1.UnimplementedUserMgtServiceServer
 }
 
 func (s *userMgtServiceServer) CreateUser(ctx context.Context,
-	req *userv1.CreateUserRequest) (*userv1.CreateUserResponse, error) {
+	req *usermgtv1.CreateUserRequest) (*usermgtv1.CreateUserResponse, error) {
 	user := req.GetUser()
 	log.Println("Got a request to create user with", user)
 	user.Id = rand.Uint32()
 
 	log.Println("Responding with", user)
-	return &userv1.CreateUserResponse{User: user}, nil
+	return &usermgtv1.CreateUserResponse{User: user}, nil
 }
 
 func RegisterUserMgtServiceServer(s grpc.ServiceRegistrar) {
-	userv1.RegisterUserMgtServiceServer(s, &userMgtServiceServer{})
+	usermgtv1.RegisterUserMgtServiceServer(s, &userMgtServiceServer{})
 }
 
 func RegisterUserMgtServiceHandlerFromEndpoint(ctx context.Context,
 	mux *runtime.ServeMux, endpoint string, opts []grpc.DialOption) error {
-	return userv1.RegisterUserMgtServiceHandlerFromEndpoint(ctx, mux, endpoint, opts)
+	return usermgtv1.RegisterUserMgtServiceHandlerFromEndpoint(ctx, mux, endpoint, opts)
 }
