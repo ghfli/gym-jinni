@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
-	usermgtv1 "github.com/ghfli/gym-jinni/services/gen/go/usermgt/v1"
+	"github.com/ghfli/gym-jinni/services/gen/go/usermgt/v1"
 	"google.golang.org/grpc"
 	"log"
 )
@@ -18,7 +18,7 @@ func run() error {
 	connectTo := "127.0.0.1:8080"
 	conn, err := grpc.Dial(connectTo, grpc.WithBlock(), grpc.WithInsecure())
 	if err != nil {
-		return fmt.Errorf("failed to connect to usermgtv1 on %s: %w", connectTo, err)
+		return fmt.Errorf("failed to connect to usermgt on %s: %w", connectTo, err)
 	}
 	log.Println("Conntected to", connectTo)
 

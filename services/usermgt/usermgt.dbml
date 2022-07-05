@@ -1,0 +1,28 @@
+Project gymjinni_usermgt {
+  datebase_type: 'PostgreSQL'
+  Note: 'gymjinni user management database schema'
+}
+
+Table usermgt.user as U {
+  id serial [pk]
+  email varchar
+  phone varchar
+  name varchar [not null]
+  hashed_passwd varchar [not null]
+  email_verified bool [default: false]
+  phone_verified bool [default: false]
+  created_at timestamptz [not null, default: `now()`]
+  passwd_changed_at timestamptz [not null, default: '0001-01-01']
+}
+
+Table usermgt.session {
+  id uuid [pk]
+  user_id int [ref: > U.id]
+  refresh_tkn varchar [not null]
+  user_agent varchar [not null]
+  client_ip inet [not null]
+  blocked bool [not null, default: false]
+  expires_at timestamptz [not null]
+  created_at timestamptz [not null]
+}
+
