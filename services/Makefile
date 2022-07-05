@@ -19,11 +19,11 @@ test: all
 bufmcc:
 	buf mod clear-cache
 
-buflint:
-	for m in ${MODS} ; do buf lint $$m ; done
-
-bufmup: buflint
+bufmup:
 	for m in ${MODS} ; do buf mod update $$m ; done
+
+buflint: bufmup
+	for m in ${MODS} ; do buf lint $$m ; done
 
 bufbld: bufmup
 	for m in ${MODS} ; do buf build $$m ; done
