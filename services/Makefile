@@ -1,10 +1,10 @@
 
 
-BUF_MODS := usermgt
+MODS := usermgt
 
 all default: services grpcclt
 
-services: bufgen
+services: bufgen dbsch
 	go build
 
 grpcclt: bufgen
@@ -20,24 +20,30 @@ bufmcc:
 	buf mod clear-cache
 
 buflint:
-	for m in ${BUF_MODS} ; do buf lint $$m ; done
+	for m in ${MODS} ; do buf lint $$m ; done
 
 bufmup: buflint
-	for m in ${BUF_MODS} ; do buf mod update $$m ; done
+	for m in ${MODS} ; do buf mod update $$m ; done
 
 bufbld: bufmup
-	for m in ${BUF_MODS} ; do buf build $$m ; done
+	for m in ${MODS} ; do buf build $$m ; done
 
 bufgen: bufbld
-	for m in ${BUF_MODS} ; do buf generate $$m ; done
+	for m in ${MODS} ; do buf generate $$m ; done
 
 bufpush: bufbld
-	for m in ${BUF_MODS} ; do buf push $$m ; done
+	for m in ${MODS} ; do buf push $$m ; done
 
-gomti:
+dbsch:
+	mkdir -p gen/sql
+	for m in ${MODS} ; do \
+		dbml2sql --postgres -o gen/sql/$$m.sql $$m/$$m.dbml ; \
+	done
+
+gomt:
 	go mod tidy
 
 clean:
 	rm -f services grpcclt
 
-.PHONY: bufmcc buflint bufmup bufbld bufgen bufpush clean gomti
+.PHONY: bufmcc buflint bufmup bufbld bufgen bufpush clean dbsch gomti
