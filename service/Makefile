@@ -1,10 +1,9 @@
 
-
 MODS := user
 
 all default: service grpcclt
 
-service: bufgen dbsch
+service: bufgen dbsql gomt
 	go build -o cmd/$@
 
 grpcclt: bufgen
@@ -37,13 +36,17 @@ bufpush: bufbld
 dbsch:
 	mkdir -p gen/sql
 	for m in ${MODS} ; do \
-		dbml2sql --postgres -o gen/sql/$$m.sql $$m/$$m.dbml ; \
+		dbml2sql --postgres -o gen/sql/$$m.dbml.sql $$m/$$m.dbml ; \
 	done
+
+dbsql: dbsch
+	for m in ${MODS} ; do cd $$m && sqlc generate ; done
 
 gomt:
 	go mod tidy
 
 clean:
-	rm -f cmd/service cmd/grpcclt
+	rm -f cmd/service cmd/grpcclt dbml-error.log
+	rm -rf gen
 
-.PHONY: bufmcc buflint bufmup bufbld bufgen bufpush clean dbsch gomti
+.PHONY: bufmcc buflint bufmup bufbld bufgen bufpush clean dbsch dbsql gomti
