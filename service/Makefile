@@ -19,7 +19,7 @@ bufmcc:
 	buf mod clear-cache
 
 bufmup:
-	for s in ${SRVS} ; do buf mod update $$s/pb ; done
+	for s in ${SVCS} ; do buf mod update $$s/pb ; done
 
 buflint: bufmup
 	buf lint
@@ -35,12 +35,12 @@ bufpush: bufbld
 
 dbsch:
 	mkdir -p gen/sql
-	for s in ${SRVS} ; do \
+	for s in ${SVCS} ; do \
 		dbml2sql --postgres -o gen/sql/$$s.dbml.sql $$s/db/$$s.dbml ; \
 	done
 
 dbsql: dbsch
-	for m in ${SRVS} ; do cd $$s/db && sqlc generate ; done
+	for s in ${SVCS} ; do (cd $$s/db && sqlc generate) ; done
 
 gomt:
 	go mod tidy
