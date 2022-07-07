@@ -3,9 +3,7 @@ module github.com/ghfli/gym-jinni/service
 go 1.18
 
 require (
-	github.com/google/uuid v1.1.2
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.10.3
-	github.com/tabbed/pqtype v0.1.1
 	google.golang.org/genproto v0.0.0-20220630174209-ad1d48641aa7
 	google.golang.org/grpc v1.47.0
 	google.golang.org/protobuf v1.28.0

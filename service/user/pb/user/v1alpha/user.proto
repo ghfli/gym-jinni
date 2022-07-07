@@ -1,7 +1,7 @@
 
 syntax="proto3";
 
-package user.v1;
+package user.v1alpha;
 
 import "google/type/datetime.proto";
 import "google/api/annotations.proto";

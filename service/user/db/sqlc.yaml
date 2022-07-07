@@ -1,6 +1,6 @@
 version: 2
 sql:
-  - schema: "../gen/sql/user.dbml.sql"
+  - schema: "../../gen/sql/user.dbml.sql"
     queries: "user.sqlc.sql"
     engine: "postgresql"
     gen:

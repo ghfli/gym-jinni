@@ -1,5 +1,5 @@
 
-MODS := user
+SVCS := user class
 
 all default: service grpcclt
 
@@ -13,34 +13,34 @@ test: all
 	cmd/service &
 	cmd/grpcclt
 	cmd/httpclt.sh
-	killall service
+	killall -e cmd/service
 
 bufmcc:
 	buf mod clear-cache
 
 bufmup:
-	for m in ${MODS} ; do buf mod update $$m ; done
+	for s in ${SRVS} ; do buf mod update $$s/pb ; done
 
 buflint: bufmup
-	for m in ${MODS} ; do buf lint $$m ; done
+	buf lint
 
 bufbld: bufmup
-	for m in ${MODS} ; do buf build $$m ; done
+	buf build
 
 bufgen: bufbld
-	for m in ${MODS} ; do buf generate $$m ; done
+	buf generate
 
 bufpush: bufbld
-	for m in ${MODS} ; do buf push $$m ; done
+	buf push
 
 dbsch:
 	mkdir -p gen/sql
-	for m in ${MODS} ; do \
-		dbml2sql --postgres -o gen/sql/$$m.dbml.sql $$m/$$m.dbml ; \
+	for s in ${SRVS} ; do \
+		dbml2sql --postgres -o gen/sql/$$s.dbml.sql $$s/db/$$s.dbml ; \
 	done
 
 dbsql: dbsch
-	for m in ${MODS} ; do cd $$m && sqlc generate ; done
+	for m in ${SRVS} ; do cd $$s/db && sqlc generate ; done
 
 gomt:
 	go mod tidy
