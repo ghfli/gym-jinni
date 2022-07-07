@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+package class.v1alpha;
+
+import "google/type/datetime.proto";
+import "google/api/annotations.proto";
+
+import "user/v1alpha/user.proto";
+
+message Class {
+    uint32 id = 1;
+    uint32 created_by = 2;
+    google.type.DateTime start_time = 3;
+    google.type.DateTime end_time = 4;
+    string description = 5;
+    uint32 min_hdcnt = 6;
+    uint32 max_hdcnt = 7;
+    // google.type.DateTime created_at = 2;
+    // string poster = 5;
+}
+

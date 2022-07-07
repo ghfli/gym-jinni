@@ -2,7 +2,7 @@ package user
 
 import (
 	"context"
-	. "github.com/ghfli/gym-jinni/service/gen/go/user/v1"
+	. "github.com/ghfli/gym-jinni/service/gen/go/user/v1alpha"
 	"log"
 	"math/rand"
 )

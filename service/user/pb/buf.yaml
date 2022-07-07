@@ -1,0 +1,10 @@
+version: v1
+name: buf.build/gymjinni/userv1alpha
+deps:
+  - buf.build/googleapis/googleapis
+breaking:
+  use:
+    - FILE
+lint:
+  use:
+    - DEFAULT

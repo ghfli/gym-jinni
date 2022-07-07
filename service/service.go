@@ -4,7 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"github.com/ghfli/gym-jinni/service/gen/go/user/v1"
+	"github.com/ghfli/gym-jinni/service/gen/go/user/v1alpha"
 	"github.com/ghfli/gym-jinni/service/user"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"google.golang.org/grpc"
@@ -40,7 +40,7 @@ func runGRPCServer() error {
 	}
 
 	server := grpc.NewServer()
-	userv1.RegisterUserServiceServer(server, &user.ImUserServiceServer{})
+	userv1alpha.RegisterUserServiceServer(server, &user.ImUserServiceServer{})
 	log.Println("gRPC server listening on", *grpcServerEndpoint)
 	if err := server.Serve(listener); err != nil {
 		return fmt.Errorf("failed to serve gRPC server: %w", err)
@@ -56,7 +56,7 @@ func runGatewayServer() error {
 
 	mux := runtime.NewServeMux()
 	opts := []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())}
-	err := userv1.RegisterUserServiceHandlerFromEndpoint(ctx, mux, *grpcServerEndpoint, opts)
+	err := userv1alpha.RegisterUserServiceHandlerFromEndpoint(ctx, mux, *grpcServerEndpoint, opts)
 
 	if err != nil {
 		return err

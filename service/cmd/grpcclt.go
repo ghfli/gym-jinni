@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
-	"github.com/ghfli/gym-jinni/service/gen/go/user/v1"
+	"github.com/ghfli/gym-jinni/service/gen/go/user/v1alpha"
 	"google.golang.org/grpc"
 	"log"
 )
@@ -22,10 +22,10 @@ func run() error {
 	}
 	log.Println("Conntected to", connectTo)
 
-	usc := userv1.NewUserServiceClient(conn)
+	usc := userv1alpha.NewUserServiceClient(conn)
 	user, err := usc.CreateUser(context.Background(),
-		&userv1.CreateUserRequest{
-			User: &userv1.User{Email: "a@b.com", Name: "abc"},
+		&userv1alpha.CreateUserRequest{
+			User: &userv1alpha.User{Email: "a@b.com", Name: "abc"},
 		})
 
 	if err != nil {
