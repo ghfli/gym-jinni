@@ -1,0 +1,10 @@
+Project gymjinni_class {
+  datebase_type: 'PostgreSQL'
+  Note: 'gymjinni class management database schema'
+}
+
+Table class.class {
+  id serial [pk]
+  created_by int // [ref: > user.user.id ]
+  description string [not null]
+}
