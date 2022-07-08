@@ -6,5 +6,9 @@ Project gymjinni_class {
 Table class.class {
   id serial [pk]
   created_by int // [ref: > user.user.id ]
-  description string [not null]
+  description varchar [not null]
+  start_time timestamptz [not null]
+  end_time timestamptz [not null]
+  min_hdcnt int
+  max_hdcnt int
 }
