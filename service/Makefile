@@ -6,6 +6,9 @@ all default: service grpcclt
 service: bufgen dbsql gomt
 	go build -o cmd/$@
 
+gomt:
+	go mod tidy
+
 grpcclt: bufgen
 	go build -o cmd/$@ cmd/$@.go
 
@@ -42,11 +45,40 @@ dbsch:
 dbsql: dbsch
 	for s in ${SVCS} ; do (cd $$s/db && sqlc generate) ; done
 
-gomt:
-	go mod tidy
+pgcr:
+	sudo docker run -e POSTGRES_PASSWORD=gj -e POSTGRES_USER=root \
+		--name postgres -p 5432:5432 -d postgres:alpine
+pgdn:
+	sudo docker stop postgres
+pgup:
+	sudo docker start postgres
+pgrm: pgdn
+	sudo docker rm postgres
+
+dbcr: pgup
+	sudo docker exec -it postgres createdb --username=root --owner=root gj
+
+dbdr: pgup
+	sudo docker exec -it postgres dropdb gj
+
+DBURL := postgresql://root:gj@127.0.0.1:5432/gj?sslmode=disable&search_path=public
+MIGDB = migrate -path mig -verbose -database "${DBURL}" $1 $2
+migup: dbsch pgup
+	$(call MIGDB,up)
+migup1: dbsch pgup
+	$(call MIGDB,up,1)
+migdn: pgup
+	$(call MIGDB,down)
+migdn1: pgup
+	$(call MIGDB,down,1)
+migvn: pgup
+	$(call MIGDB,version)
+migfr: migvn
+	$(call MIGDB,force)  # follow the instructions
 
 clean:
 	rm -f cmd/service cmd/grpcclt dbml-error.log
 	rm -rf gen
 
-.PHONY: bufmcc buflint bufmup bufbld bufgen bufpush clean dbsch dbsql gomti
+.PHONY: bufmcc buflint bufmup bufbld bufgen bufpush clean dbsch dbsql gomti \
+	pgcr pgdn pgup pgrm dbcr dbdr migup migup1 migdn migdn1 migvn
