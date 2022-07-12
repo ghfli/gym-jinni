@@ -1,5 +1,6 @@
 
 SVCS := user class
+DBURL := postgresql://root:gj@127.0.0.1:5432/gj?sslmode=disable&search_path=public
 
 all default: service grpcclt
 
@@ -12,8 +13,8 @@ gomt:
 grpcclt: bufgen
 	go build -o cmd/$@ cmd/$@.go
 
-test: all
-	cmd/service &
+test: all pgup
+	export DBURL="${DBURL}"; cmd/service &
 	cmd/grpcclt
 	cmd/httpclt.sh
 	killall -e cmd/service
@@ -61,7 +62,9 @@ dbcr: pgup
 dbdr: pgup
 	sudo docker exec -it postgres dropdb gj
 
-DBURL := postgresql://root:gj@127.0.0.1:5432/gj?sslmode=disable&search_path=public
+dbps: pgup
+	sudo docker exec -it postgres psql gj
+
 MIGDB = migrate -path mig -verbose -database "${DBURL}" $1 $2
 migup: dbsch pgup
 	$(call MIGDB,up)
@@ -81,4 +84,4 @@ clean:
 	rm -rf gen
 
 .PHONY: bufmcc buflint bufmup bufbld bufgen bufpush clean dbsch dbsql gomti \
-	pgcr pgdn pgup pgrm dbcr dbdr migup migup1 migdn migdn1 migvn
+	pgcr pgdn pgup pgrm dbcr dbdr dbps migup migup1 migdn migdn1 migvn

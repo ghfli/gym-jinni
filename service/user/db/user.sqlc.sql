@@ -6,13 +6,14 @@ WHERE id = $1 LIMIT 1;
 SELECT * FROM "user".user
 ORDER BY name;
 
+/* use :copyfrom instead of :one if do not need returning */
 -- name: CreateUser :one
 INSERT INTO "user".user (
-  email, phone, name, hashed_passwd --, email_verified, phone_verified
+  email, phone, name, hashed_passwd
 ) VALUES (
-  $1, $2, $3, $4 --, $5, $6
+  $1, $2, $3, $4
 )
-RETURNING *;
+returning *;
 
 -- name: UpdateUser :exec
 UPDATE "user".user
