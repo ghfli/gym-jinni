@@ -39,8 +39,13 @@ func runGRPCServer() error {
 			*grpcServerEndpoint, err)
 	}
 
+	usersvc, err := user.NewImUserServiceServer()
+	if err != nil {
+		return fmt.Errorf("failed to create user service server: %w", err)
+	}
+
 	server := grpc.NewServer()
-	userv1alpha.RegisterUserServiceServer(server, &user.ImUserServiceServer{})
+	userv1alpha.RegisterUserServiceServer(server, usersvc)
 	log.Println("gRPC server listening on", *grpcServerEndpoint)
 	if err := server.Serve(listener); err != nil {
 		return fmt.Errorf("failed to serve gRPC server: %w", err)
