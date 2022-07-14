@@ -7,7 +7,7 @@
 
 
 syntax = "proto2";
-package userv1alpha;
+package validator.v1alpha;
 
 import "google/protobuf/descriptor.proto";
 

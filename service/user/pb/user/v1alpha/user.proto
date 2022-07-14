@@ -5,14 +5,14 @@ package user.v1alpha;
 
 import "google/type/datetime.proto";
 import "google/api/annotations.proto";
-import "user/v1alpha/validator.proto";
+import "validator/v1alpha/validator.proto";
 
 message User {
     int32  id = 1;
-    string email = 2 [(validator.field) = {msg_exists: true, string_not_empty: true}];
-    string phone = 3 [(validator.field) = {msg_exists: true, string_not_empty: true}];
-    string name = 4 [(validator.field) = {msg_exists: true, string_not_empty: true}];
-    string passwd = 5 [(validator.field) = {msg_exists: true, string_not_empty: true}];
+    string email = 2 [(validator.v1alpha.field) = {msg_exists: true, string_not_empty: true}];
+    string phone = 3 [(validator.v1alpha.field) = {msg_exists: true, string_not_empty: true}];
+    string name = 4 [(validator.v1alpha.field) = {msg_exists: true, string_not_empty: true}];
+    string passwd = 5 [(validator.v1alpha.field) = {msg_exists: true, string_not_empty: true}];
 }
 
 message CreateUserRequest {

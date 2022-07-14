@@ -2,3 +2,4 @@ version: v1
 directories:
   - user/pb
   - class/pb
+  - validator/pb

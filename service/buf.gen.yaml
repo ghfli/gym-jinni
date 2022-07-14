@@ -19,5 +19,4 @@ plugins:
     opt: paths=source_relative
   - name: govalidators
     out: gen/go
-    path: /usr/local/bin/protoc-gen-govalidators
-    opt: govalidators_out=gen/go
+    opt: paths=source_relative
