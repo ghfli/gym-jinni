@@ -23,7 +23,7 @@ bufmcc:
 	buf mod clear-cache
 
 bufmup:
-	for s in ${SVCS} ; do buf mod update $$s/pb ; done
+	for s in ${SVCS} validator ; do buf mod update $$s/pb ; done
 
 buflint: bufmup
 	buf lint
@@ -57,10 +57,10 @@ pgrm: pgdn
 	sudo docker rm postgres
 
 dbcr: pgup
-	sudo docker exec -it postgres createdb --username=root --owner=root gj
+	sudo docker exec postgres createdb -U root -O root gj
 
 dbdr: pgup
-	sudo docker exec -it postgres dropdb gj
+	sudo docker exec postgres dropdb gj
 
 dbps: pgup
 	sudo docker exec -it postgres psql gj
@@ -79,9 +79,19 @@ migvn: pgup
 migfr: migvn
 	$(call MIGDB,force)  # follow the instructions
 
+setup: pgcr
+	while ! sudo docker exec postgres pgrep postgres: -a ; \
+		do echo -n . ; sleep 1 ; done
+	sleep 30
+	$(MAKE) dbcr
+	$(MAKE) migup
+
+teardn: migdn dbdr pgrm
+
 clean:
 	rm -f cmd/service cmd/grpcclt dbml-error.log
 	rm -rf gen
 
 .PHONY: bufmcc buflint bufmup bufbld bufgen bufpush clean dbsch dbsql gomti \
-	pgcr pgdn pgup pgrm dbcr dbdr dbps migup migup1 migdn migdn1 migvn
+	pgcr pgdn pgup pgrm dbcr dbdr dbps migup migup1 migdn migdn1 migvn setup \
+	teardn

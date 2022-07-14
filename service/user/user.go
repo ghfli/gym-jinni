@@ -32,12 +32,18 @@ func NewImUserServiceServer() (*ImUserServiceServer, error) {
 }
 
 func ValidateEmail(email string) bool {
+	if email == "" {
+		return false
+	}
 	re := regexp.MustCompile(
 		"^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$")
 	return re.MatchString(email)
 }
 
 func ValidatePhone(phone string) bool {
+	if phone == "" {
+		return false
+	}
 	re := regexp.MustCompile(`^(?:(?:\(?(?:00|\+)([1-4]\d\d|[1-9]\d?)\)?)?[\-\.\ \\\/]?)?((?:\(?\d{1,}\)?[\-\.\ \\\/]?){0,})(?:[\-\.\ \\\/]?(?:#|ext\.?|extension|x)[\-\.\ \\\/]?(\d+))?$`)
 	return re.MatchString(phone)
 }
@@ -50,20 +56,24 @@ func (s *ImUserServiceServer) CreateUser(ctx context.Context,
 	var res CreateUserResponse
 	var arg CreateUserParams
 
-	email := user.GetEmail()
-	if ValidateEmail(email) {
+	if email := user.GetEmail(); ValidateEmail(email) {
 		arg.Email.String = email
 		arg.Email.Valid = true
 	} else {
 		return &res, fmt.Errorf("Invalid email: %s", email)
 	}
 
-	phone := user.GetPhone()
-	if ValidatePhone(phone) {
+	if phone := user.GetPhone(); ValidatePhone(phone) {
 		arg.Phone.String = phone
 		arg.Phone.Valid = true
 	} else {
 		return &res, fmt.Errorf("Invalid phone: %s", phone)
+	}
+
+	if name := user.GetName(); name != "" {
+		arg.Name = name
+	} else {
+		return &res, fmt.Errorf("Invalid name: %s", name)
 	}
 
 	userUser, err := s.q.CreateUser(ctx, arg)

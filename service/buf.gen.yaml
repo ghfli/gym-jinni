@@ -17,3 +17,6 @@ plugins:
   - name: grpc-gateway
     out: gen/go
     opt: paths=source_relative
+  - name: govalidators
+    out: gen/go
+    opt: paths=source_relative

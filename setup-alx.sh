@@ -84,6 +84,7 @@ go_install github.com/kyleconroy/sqlc/cmd/sqlc
 go_install google.golang.org/protobuf/cmd/protoc-gen-go
 go_install google.golang.org/grpc/cmd/protoc-gen-go-grpc
 go_install github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-grpc-gateway
+go_install github.com/mwitkow/go-proto-validators/protoc-gen-govalidators
 go_install github.com/golang/mock/mockgen v1.6.0
 
 if ! [ -e /home/vagrant/.bashrc.tail ] ; then
