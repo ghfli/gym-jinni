@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"github.com/ghfli/gym-jinni/service/gen/go/user/v1alpha"
 	"github.com/ghfli/gym-jinni/service/user"
+	"github.com/grpc-ecosystem/go-grpc-middleware"
+	grpc_validator "github.com/grpc-ecosystem/go-grpc-middleware/validator"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -44,7 +46,10 @@ func runGRPCServer() error {
 		return fmt.Errorf("failed to create user service server: %w", err)
 	}
 
-	server := grpc.NewServer()
+	server := grpc.NewServer(
+		grpc.UnaryInterceptor(grpc_middleware.ChainUnaryServer(
+			grpc_validator.UnaryServerInterceptor(),
+		)))
 	userv1alpha.RegisterUserServiceServer(server, usersvc)
 	log.Println("gRPC server listening on", *grpcServerEndpoint)
 	if err := server.Serve(listener); err != nil {
