@@ -7,8 +7,8 @@ import (
 	. "github.com/ghfli/gym-jinni/service/gen/go/user/v1alpha"
 	_ "github.com/jackc/pgx/v4/stdlib"
 	"log"
+	"net/mail"
 	"os"
-	"regexp"
 )
 
 type ImUserServiceServer struct {
@@ -32,20 +32,8 @@ func NewImUserServiceServer() (*ImUserServiceServer, error) {
 }
 
 func ValidateEmail(email string) bool {
-	if email == "" {
-		return false
-	}
-	re := regexp.MustCompile(
-		"^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$")
-	return re.MatchString(email)
-}
-
-func ValidatePhone(phone string) bool {
-	if phone == "" {
-		return false
-	}
-	re := regexp.MustCompile(`^(?:(?:\(?(?:00|\+)([1-4]\d\d|[1-9]\d?)\)?)?[\-\.\ \\\/]?)?((?:\(?\d{1,}\)?[\-\.\ \\\/]?){0,})(?:[\-\.\ \\\/]?(?:#|ext\.?|extension|x)[\-\.\ \\\/]?(\d+))?$`)
-	return re.MatchString(phone)
+	_, err := mail.ParseAddress(email)
+	return err == nil
 }
 
 func (s *ImUserServiceServer) CreateUser(ctx context.Context,
@@ -63,18 +51,9 @@ func (s *ImUserServiceServer) CreateUser(ctx context.Context,
 		return &res, fmt.Errorf("Invalid email: %s", email)
 	}
 
-	if phone := user.GetPhone(); ValidatePhone(phone) {
-		arg.Phone.String = phone
-		arg.Phone.Valid = true
-	} else {
-		return &res, fmt.Errorf("Invalid phone: %s", phone)
-	}
-
-	if name := user.GetName(); name != "" {
-		arg.Name = name
-	} else {
-		return &res, fmt.Errorf("Invalid name: %s", name)
-	}
+	arg.Phone.String = user.GetPhone()
+	arg.Phone.Valid = true
+	arg.Name = user.GetName()
 
 	userUser, err := s.q.CreateUser(ctx, arg)
 	if err != nil {

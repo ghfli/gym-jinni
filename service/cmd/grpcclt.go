@@ -25,7 +25,9 @@ func run() error {
 	usc := userv1alpha.NewUserServiceClient(conn)
 	user, err := usc.CreateUser(context.Background(),
 		&userv1alpha.CreateUserRequest{
-			User: &userv1alpha.User{Email: "a@b.com", Name: "abc"},
+			User: &userv1alpha.User{Email: "a@b.com",
+				Phone: "6041234567", Name: "abc", Passwd: "abc",
+			},
 		})
 
 	if err != nil {

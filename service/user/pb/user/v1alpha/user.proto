@@ -10,7 +10,7 @@ import "validator/v1alpha/validator.proto";
 message User {
     int32  id = 1;
     string email = 2 [(validator.v1alpha.field) = {msg_exists: true, string_not_empty: true}];
-    string phone = 3 [(validator.v1alpha.field) = {msg_exists: true, string_not_empty: true}];
+    string phone = 3 [(validator.v1alpha.field) = {msg_exists: true, string_not_empty: true, regex: "^[0-9]{3,15}$"}];
     string name = 4 [(validator.v1alpha.field) = {msg_exists: true, string_not_empty: true}];
     string passwd = 5 [(validator.v1alpha.field) = {msg_exists: true, string_not_empty: true}];
 }
