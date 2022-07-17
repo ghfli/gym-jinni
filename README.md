@@ -52,7 +52,7 @@ Directory service/ is for developing backend service:
         - build cmd/grpcclt
         - test the backend service with grpc client and http client
     * define protobuf files for module $MOD under $MOD/pb/
-    * define database schemas for module $MOD under $MOD/db/
+    * define database schemas and queries for module $MOD under $MOD/db/
     * implement business logic for module $MOD within $MOD/$MOD.go
 ```
 Review the service/Makefile to learn more details.
