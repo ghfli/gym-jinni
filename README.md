@@ -21,6 +21,7 @@ following directory structure:
         |____ setup-alx.sh
         |____ service/
         |         |____ Makefile
+        |         |____ service.go
         |         |____ class/
         |         |         |____ pb/
         |         |         |____ db/
@@ -54,6 +55,7 @@ Directory service/ is for developing backend service:
     * define protobuf files for module $MOD under $MOD/pb/
     * define database schemas and queries for module $MOD under $MOD/db/
     * implement business logic for module $MOD within $MOD/$MOD.go
+    * add more grpc-middleware packages within service.go
 ```
 Review the service/Makefile to learn more details.
 
