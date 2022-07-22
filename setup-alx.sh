@@ -15,7 +15,7 @@ echo setting timezone...
 timedatectl set-timezone America/Vancouver
 
 echo installing base-devel, go and git for yay...
-pacman -S --needed --noconfirm base-devel go git
+pacman -S --needed --noconfirm base-devel fuse go git squashfuse screen vim
 
 if ! installed yay ; then
     echo installing yay, an aur helper...
@@ -34,6 +34,8 @@ fi
 
 if ! installed flutter ; then
     echo installing flutter with snapd...
+    echo if it failed, try to reload the vm again, i.e.,
+    echo vagrant reload --provision
     systemctl start snapd
     ln -sf /var/lib/snapd/snap /snap
     snap install flutter --classic
@@ -42,7 +44,7 @@ fi
 
 echo installing any other optional packages you like...
 # pacman -D --noconfirm npm && rm -rf /usr/lib/node_modules/npm
-pacman -S --needed --noconfirm darkhttpd vim screen man-db npm docker \
+pacman -S --needed --noconfirm darkhttpd man-db npm docker \
     protobuf ctags github-cli
 
 if ! installed dbdocs ; then
