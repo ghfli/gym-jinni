@@ -88,6 +88,17 @@ setup: pgcr
 
 teardn: migdn dbdr pgrm
 
+bbcr:
+	mkdir -p /home/vagrant/budibase
+	sudo docker run -d -t --name budibase -v /home/vagrant/budibase:/data \
+		-p 10000:80 --restart unless-stopped budibase/budibase:latest
+bbdn:
+	sudo docker stop budibase
+bbrm:
+	sudo docker rm budibase
+bbup:
+	sudo docker start budibase
+
 clean:
 	rm -f cmd/service cmd/grpcclt dbml-error.log
 	rm -rf gen

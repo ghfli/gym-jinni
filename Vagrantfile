@@ -90,7 +90,10 @@ Vagrant.configure("2") do |config|
     end
 
     alx.vm.network "forwarded_port", guest: 22, host: 2222
+    alx.vm.network "forwarded_port", guest: 5432, host: 5432
     alx.vm.network "forwarded_port", guest: 8080, host: 8080
+    alx.vm.network "forwarded_port", guest: 8081, host: 8081
+    alx.vm.network "forwarded_port", guest: 10000, host: 10000
 
     alx.vm.provision "setup-alx", type: "shell", path: "setup-alx.sh"
     # alx.vm.provision "file", source: "~/.gitconfig", destination: ".gitconfig"
