@@ -1,0 +1,43 @@
+Project gymjinni_rbac {
+  datebase_type: 'PostgreSQL'
+  Note: 'gymjinni role-based access control database schema'
+}
+
+Table rbac.role as R {
+  id serial [pk]
+  name varchar [unique, not null]
+  description varchar
+  created_at timestamptz [not null, default: `now()`]
+}
+
+Table rbac.permission as P {
+  id serial [pk]
+  name varchar [unique, not null]
+  resource varchar [not null]
+  action varchar [not null]
+  description varchar
+  created_at timestamptz [not null, default: `now()`]
+}
+
+Table rbac.role_permission as RP {
+  role_id int [ref: > R.id, not null]
+  permission_id int [ref: > P.id, not null]
+  created_at timestamptz [not null, default: `now()`]
+  
+  indexes {
+    (role_id, permission_id) [pk]
+  }
+}
+
+Table rbac.user_role as UR {
+  user_id int [not null]
+  role_id int [ref: > R.id, not null]
+  granted_by int
+  granted_at timestamptz [not null, default: `now()`]
+  expires_at timestamptz
+  
+  indexes {
+    (user_id, role_id) [pk]
+  }
+}
+
