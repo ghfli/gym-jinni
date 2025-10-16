@@ -94,6 +94,8 @@ bbcr:
                -p 10000:80 --restart unless-stopped budibase/budibase:latest
 bbdn:
 	sudo docker stop budibase
+bbrm:
+	sudo docker rm budibase
 bbup:
 	sudo docker start budibase
 
