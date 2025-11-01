@@ -1,0 +1,69 @@
+---
+- name: Setup Podman network and containers for K8s cluster
+  hosts: localhost
+  gather_facts: yes
+  roles:
+    - role: podman-nodes
+      tags: ['podman', 'setup']
+
+- name: Install and configure MicroK8s on all nodes
+  hosts: k8s_cluster
+  gather_facts: yes
+  roles:
+    - role: microk8s
+      tags: ['microk8s', 'setup']
+
+- name: Join worker nodes to control plane
+  hosts: control_plane
+  gather_facts: no
+  tasks:
+    - name: Generate join token
+      shell: microk8s add-node --token-ttl 3600 | grep "microk8s join" | head -1
+      register: join_command
+      changed_when: false
+      tags: ['microk8s', 'join']
+
+    - name: Set join command as fact
+      set_fact:
+        microk8s_join_command: "{{ join_command.stdout }}"
+      tags: ['microk8s', 'join']
+
+- name: Execute join on worker nodes
+  hosts: workers
+  gather_facts: no
+  tasks:
+    - name: Join worker to cluster
+      shell: "{{ hostvars['node1']['microk8s_join_command'] }}"
+      args:
+        creates: /var/snap/microk8s/current/var/lock/clustered.lock
+      tags: ['microk8s', 'join']
+
+- name: Configure kubectl access from host
+  hosts: localhost
+  gather_facts: no
+  tasks:
+    - name: Create .kube directory
+      file:
+        path: "{{ ansible_env.HOME }}/.kube"
+        state: directory
+        mode: '0755'
+      tags: ['kubectl']
+
+    - name: Get kubeconfig from control plane
+      shell: podman exec gym-jinni-node1 microk8s config
+      register: kubeconfig_content
+      changed_when: false
+      tags: ['kubectl']
+
+    - name: Save kubeconfig
+      copy:
+        content: "{{ kubeconfig_content.stdout }}"
+        dest: "{{ ansible_env.HOME }}/.kube/gym-jinni-config"
+        mode: '0600'
+      tags: ['kubectl']
+
+    - name: Display kubectl access info
+      debug:
+        msg: "Use: export KUBECONFIG=$HOME/.kube/gym-jinni-config"
+      tags: ['kubectl']
+

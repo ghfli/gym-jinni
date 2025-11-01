@@ -1,0 +1,29 @@
+# Ansible
+*.retry
+.ansible/
+
+# Temporary files
+*.tmp
+*.log
+*.tar
+
+# Kubeconfig
+*.kubeconfig
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+

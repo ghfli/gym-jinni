@@ -1,0 +1,91 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: csr-service
+  namespace: gym-jinni
+  labels:
+    app: csr-service
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8082
+    targetPort: 8082
+    name: grpc
+  - port: 8083
+    targetPort: 8083
+    name: http
+  selector:
+    app: csr-service
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: csr-service
+  namespace: gym-jinni
+  labels:
+    app: csr-service
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: csr-service
+  template:
+    metadata:
+      labels:
+        app: csr-service
+    spec:
+      initContainers:
+      - name: wait-for-postgres
+        image: busybox:1.35
+        command: ['sh', '-c', 'until nc -z postgres 5432; do echo waiting for postgres; sleep 2; done;']
+      - name: run-migrations
+        image: gym-jinni/csr-service:latest
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            apt-get update && apt-get install -y curl
+            curl -L https://github.com/golang-migrate/migrate/releases/download/v4.15.2/migrate.linux-amd64.tar.gz | tar xvz
+            mv migrate /usr/local/bin/
+            cd /app/csr_service
+            migrate -path mig -database "${DBURL}" up || true
+        env:
+        - name: DBURL
+          valueFrom:
+            configMapKeyRef:
+              name: gym-jinni-config
+              key: DBURL
+      containers:
+      - name: csr-service
+        image: gym-jinni/csr-service:latest
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 8082
+          name: grpc
+        - containerPort: 8083
+          name: http
+        env:
+        - name: DBURL
+          valueFrom:
+            configMapKeyRef:
+              name: gym-jinni-config
+              key: DBURL
+        livenessProbe:
+          httpGet:
+            path: /v1/roles
+            port: 8083
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /v1/roles
+            port: 8083
+          initialDelaySeconds: 10
+          periodSeconds: 5
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+

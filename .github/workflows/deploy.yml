@@ -1,0 +1,100 @@
+name: Build and Deploy to K8s
+
+on:
+  push:
+    branches: [ main, master, csr ]
+  pull_request:
+    branches: [ main, master, csr ]
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ${{ github.repository }}
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [csr-service, service, ui]
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v2
+
+    - name: Log in to Container Registry
+      uses: docker/login-action@v2
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Extract metadata
+      id: meta
+      uses: docker/metadata-action@v4
+      with:
+        images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.service }}
+        tags: |
+          type=ref,event=branch
+          type=ref,event=pr
+          type=semver,pattern={{version}}
+          type=semver,pattern={{major}}.{{minor}}
+          type=sha
+
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v4
+      with:
+        context: .
+        file: k8s-setup/docker/Dockerfile.${{ matrix.service }}
+        push: ${{ github.event_name != 'pull_request' }}
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+  deploy:
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Set up kubectl
+      uses: azure/setup-kubectl@v3
+      with:
+        version: 'v1.28.0'
+
+    - name: Configure kubectl
+      run: |
+        mkdir -p $HOME/.kube
+        echo "${{ secrets.KUBECONFIG }}" | base64 -d > $HOME/.kube/config
+
+    - name: Deploy to Kubernetes
+      run: |
+        kubectl apply -f k8s-setup/manifests/namespace.yml
+        kubectl apply -f k8s-setup/manifests/secrets.yml
+        kubectl apply -f k8s-setup/manifests/configmaps.yml
+        kubectl apply -f k8s-setup/manifests/postgres-statefulset.yml
+        kubectl apply -f k8s-setup/manifests/csr-service-deployment.yml
+        kubectl apply -f k8s-setup/manifests/main-service-deployment.yml
+        kubectl apply -f k8s-setup/manifests/ui-deployment.yml
+        kubectl apply -f k8s-setup/manifests/ingress.yml
+
+    - name: Wait for deployments
+      run: |
+        kubectl wait --for=condition=ready pod -l app=postgres -n gym-jinni --timeout=300s
+        kubectl wait --for=condition=ready pod -l app=csr-service -n gym-jinni --timeout=300s
+        kubectl wait --for=condition=ready pod -l app=main-service -n gym-jinni --timeout=300s
+        kubectl wait --for=condition=ready pod -l app=ui -n gym-jinni --timeout=300s
+
+    - name: Verify deployment
+      run: |
+        kubectl get pods -n gym-jinni
+        kubectl get svc -n gym-jinni
+        kubectl get ingress -n gym-jinni
+

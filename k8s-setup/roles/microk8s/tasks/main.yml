@@ -1,0 +1,58 @@
+---
+- name: Check if MicroK8s is already installed
+  shell: which microk8s
+  register: microk8s_check
+  failed_when: false
+  changed_when: false
+
+- name: Install MicroK8s via snap
+  shell: snap install microk8s --classic --channel={{ microk8s_version }}
+  when: microk8s_check.rc != 0
+  register: microk8s_install
+  retries: 3
+  delay: 10
+  until: microk8s_install.rc == 0
+
+- name: Wait for MicroK8s to be ready
+  shell: microk8s status --wait-ready
+  retries: 20
+  delay: 10
+  register: result
+  until: result.rc == 0
+
+- name: Enable required MicroK8s addons (control plane only)
+  shell: microk8s enable {{ item }}
+  loop:
+    - dns
+    - storage
+    - ingress
+    - metrics-server
+  when: is_control_plane | default(false)
+  register: addon_enable
+  changed_when: "'is already enabled' not in addon_enable.stdout"
+  retries: 3
+  delay: 5
+  until: addon_enable.rc == 0
+
+- name: Configure firewall rules for MicroK8s
+  shell: |
+    iptables -P FORWARD ACCEPT
+    iptables -P INPUT ACCEPT
+    iptables -P OUTPUT ACCEPT
+  changed_when: false
+
+- name: Add microk8s alias to bashrc
+  lineinfile:
+    path: /root/.bashrc
+    line: "alias kubectl='microk8s kubectl'"
+    create: yes
+
+- name: Display MicroK8s status
+  shell: microk8s status
+  register: mk8s_status
+  changed_when: false
+
+- name: Show status
+  debug:
+    msg: "{{ mk8s_status.stdout_lines }}"
+

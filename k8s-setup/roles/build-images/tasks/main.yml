@@ -1,0 +1,70 @@
+---
+- name: Ensure build directory exists
+  file:
+    path: "{{ playbook_dir }}/../docker"
+    state: directory
+    mode: '0755'
+
+- name: Build CSR service Docker image
+  shell: |
+    cd {{ playbook_dir }}/../../
+    podman build -f k8s-setup/docker/Dockerfile.csr-service -t gym-jinni/csr-service:latest .
+  args:
+    chdir: "{{ playbook_dir }}/../../"
+  register: build_csr
+  changed_when: "'Successfully tagged' in build_csr.stdout or 'Writing manifest' in build_csr.stderr"
+
+- name: Build main service Docker image
+  shell: |
+    cd {{ playbook_dir }}/../../
+    podman build -f k8s-setup/docker/Dockerfile.service -t gym-jinni/service:latest .
+  args:
+    chdir: "{{ playbook_dir }}/../../"
+  register: build_service
+  changed_when: "'Successfully tagged' in build_service.stdout or 'Writing manifest' in build_service.stderr"
+
+- name: Build UI Docker image
+  shell: |
+    cd {{ playbook_dir }}/../../
+    podman build -f k8s-setup/docker/Dockerfile.ui -t gym-jinni/ui:latest .
+  args:
+    chdir: "{{ playbook_dir }}/../../"
+  register: build_ui
+  changed_when: "'Successfully tagged' in build_ui.stdout or 'Writing manifest' in build_ui.stderr"
+
+- name: Save images to tar files
+  shell: podman save -o /tmp/{{ item.name }}.tar {{ item.image }}
+  loop:
+    - { name: 'csr-service', image: 'gym-jinni/csr-service:latest' }
+    - { name: 'service', image: 'gym-jinni/service:latest' }
+    - { name: 'ui', image: 'gym-jinni/ui:latest' }
+
+- name: Copy images to control plane node
+  shell: |
+    podman cp /tmp/{{ item }}.tar gym-jinni-node1:/tmp/
+  loop:
+    - csr-service
+    - service
+    - ui
+
+- name: Import images into MicroK8s
+  shell: |
+    podman exec gym-jinni-node1 bash -c "microk8s ctr image import /tmp/{{ item }}.tar"
+  loop:
+    - csr-service
+    - service
+    - ui
+
+- name: Clean up tar files
+  file:
+    path: "/tmp/{{ item }}.tar"
+    state: absent
+  loop:
+    - csr-service
+    - service
+    - ui
+
+- name: Display build status
+  debug:
+    msg: "All Docker images built and imported to MicroK8s"
+

@@ -1,0 +1,80 @@
+---
+- name: Ensure manifests directory exists
+  file:
+    path: "{{ playbook_dir }}/../manifests"
+    state: directory
+    mode: '0755'
+
+- name: Set KUBECONFIG environment
+  set_fact:
+    kubeconfig_path: "{{ ansible_env.HOME }}/.kube/gym-jinni-config"
+
+- name: Apply namespace
+  shell: |
+    export KUBECONFIG={{ kubeconfig_path }}
+    kubectl apply -f {{ playbook_dir }}/../manifests/namespace.yml
+  register: ns_result
+  changed_when: "'created' in ns_result.stdout or 'configured' in ns_result.stdout"
+
+- name: Apply secrets
+  shell: |
+    export KUBECONFIG={{ kubeconfig_path }}
+    kubectl apply -f {{ playbook_dir }}/../manifests/secrets.yml
+  register: secrets_result
+  changed_when: "'created' in secrets_result.stdout or 'configured' in secrets_result.stdout"
+
+- name: Apply configmaps
+  shell: |
+    export KUBECONFIG={{ kubeconfig_path }}
+    kubectl apply -f {{ playbook_dir }}/../manifests/configmaps.yml
+  register: cm_result
+  changed_when: "'created' in cm_result.stdout or 'configured' in cm_result.stdout"
+
+- name: Apply PostgreSQL StatefulSet
+  shell: |
+    export KUBECONFIG={{ kubeconfig_path }}
+    kubectl apply -f {{ playbook_dir }}/../manifests/postgres-statefulset.yml
+  register: pg_result
+  changed_when: "'created' in pg_result.stdout or 'configured' in pg_result.stdout"
+
+- name: Wait for PostgreSQL to be ready
+  shell: |
+    export KUBECONFIG={{ kubeconfig_path }}
+    kubectl wait --for=condition=ready pod -l app=postgres -n gym-jinni --timeout=300s
+  retries: 3
+  delay: 10
+  register: pg_wait
+  until: pg_wait.rc == 0
+
+- name: Apply CSR service deployment
+  shell: |
+    export KUBECONFIG={{ kubeconfig_path }}
+    kubectl apply -f {{ playbook_dir }}/../manifests/csr-service-deployment.yml
+  register: csr_result
+  changed_when: "'created' in csr_result.stdout or 'configured' in csr_result.stdout"
+
+- name: Apply main service deployment
+  shell: |
+    export KUBECONFIG={{ kubeconfig_path }}
+    kubectl apply -f {{ playbook_dir }}/../manifests/main-service-deployment.yml
+  register: main_result
+  changed_when: "'created' in main_result.stdout or 'configured' in main_result.stdout"
+
+- name: Apply UI deployment
+  shell: |
+    export KUBECONFIG={{ kubeconfig_path }}
+    kubectl apply -f {{ playbook_dir }}/../manifests/ui-deployment.yml
+  register: ui_result
+  changed_when: "'created' in ui_result.stdout or 'configured' in ui_result.stdout"
+
+- name: Apply ingress
+  shell: |
+    export KUBECONFIG={{ kubeconfig_path }}
+    kubectl apply -f {{ playbook_dir }}/../manifests/ingress.yml
+  register: ingress_result
+  changed_when: "'created' in ingress_result.stdout or 'configured' in ingress_result.stdout"
+
+- name: Display deployment status
+  debug:
+    msg: "All gym-jinni services deployed to Kubernetes"
+

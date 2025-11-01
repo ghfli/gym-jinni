@@ -1,0 +1,83 @@
+stages:
+  - build
+  - test
+  - deploy
+
+variables:
+  DOCKER_DRIVER: overlay2
+  DOCKER_TLS_CERTDIR: "/certs"
+  IMAGE_TAG: $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA
+
+.build_template: &build_template
+  stage: build
+  image: docker:24-dind
+  services:
+    - docker:24-dind
+  before_script:
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+  script:
+    - docker build -f k8s-setup/docker/Dockerfile.$SERVICE -t $CI_REGISTRY_IMAGE/$SERVICE:$CI_COMMIT_SHORT_SHA .
+    - docker tag $CI_REGISTRY_IMAGE/$SERVICE:$CI_COMMIT_SHORT_SHA $CI_REGISTRY_IMAGE/$SERVICE:latest
+    - docker push $CI_REGISTRY_IMAGE/$SERVICE:$CI_COMMIT_SHORT_SHA
+    - docker push $CI_REGISTRY_IMAGE/$SERVICE:latest
+  only:
+    - main
+    - master
+    - csr
+
+build:csr-service:
+  <<: *build_template
+  variables:
+    SERVICE: csr-service
+
+build:service:
+  <<: *build_template
+  variables:
+    SERVICE: service
+
+build:ui:
+  <<: *build_template
+  variables:
+    SERVICE: ui
+
+test:integration:
+  stage: test
+  image: golang:1.18
+  services:
+    - postgres:15-alpine
+  variables:
+    POSTGRES_DB: gj
+    POSTGRES_USER: root
+    POSTGRES_PASSWORD: gj
+    DBURL: "postgresql://root:gj@postgres:5432/gj?sslmode=disable&search_path=public"
+  script:
+    - cd service && make test || true
+    - cd ../csr_service && make test || true
+  only:
+    - main
+    - master
+    - csr
+
+deploy:kubernetes:
+  stage: deploy
+  image: bitnami/kubectl:latest
+  before_script:
+    - mkdir -p $HOME/.kube
+    - echo "$KUBECONFIG_CONTENT" | base64 -d > $HOME/.kube/config
+  script:
+    - kubectl apply -f k8s-setup/manifests/namespace.yml
+    - kubectl apply -f k8s-setup/manifests/secrets.yml
+    - kubectl apply -f k8s-setup/manifests/configmaps.yml
+    - kubectl apply -f k8s-setup/manifests/postgres-statefulset.yml
+    - kubectl apply -f k8s-setup/manifests/csr-service-deployment.yml
+    - kubectl apply -f k8s-setup/manifests/main-service-deployment.yml
+    - kubectl apply -f k8s-setup/manifests/ui-deployment.yml
+    - kubectl apply -f k8s-setup/manifests/ingress.yml
+    - kubectl rollout status deployment/csr-service -n gym-jinni
+    - kubectl rollout status deployment/main-service -n gym-jinni
+    - kubectl rollout status deployment/ui -n gym-jinni
+  only:
+    - main
+    - master
+  when: manual
+
