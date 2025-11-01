@@ -1,5 +1,5 @@
 
-SVCS := user class
+SVCS := rbac
 DBURL := postgresql://root:gj@127.0.0.1:5432/gj?sslmode=disable&search_path=public
 
 all default: service grpcclt
@@ -15,6 +15,7 @@ grpcclt: bufgen
 
 test: all pgup
 	export DBURL="${DBURL}"; cmd/service &
+	sleep 2
 	cmd/grpcclt
 	cmd/httpclt.sh
 	killall -e cmd/service
@@ -88,21 +89,11 @@ setup: pgcr
 
 teardn: migdn dbdr pgrm
 
-bbcr:
-	mkdir -p /vagrant/service/bb/data
-	sudo docker run -d -t --name budibase -v /vagrant/service/bb/data:/data \
-               -p 10000:80 --restart unless-stopped budibase/budibase:latest
-bbdn:
-	sudo docker stop budibase
-bbrm:
-	sudo docker rm budibase
-bbup:
-	sudo docker start budibase
-
 clean:
 	rm -f cmd/service cmd/grpcclt dbml-error.log
 	rm -rf gen
 
-.PHONY: bufmcc buflint bufmup bufbld bufgen bufpush clean dbsch dbsql gomti \
+.PHONY: bufmcc buflint bufmup bufbld bufgen bufpush clean dbsch dbsql gomt \
 	pgcr pgdn pgup pgrm dbcr dbdr dbps migup migup1 migdn migdn1 migvn setup \
 	teardn
+

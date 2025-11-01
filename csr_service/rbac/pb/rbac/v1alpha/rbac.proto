@@ -1,0 +1,399 @@
+syntax = "proto3";
+
+package rbac.v1alpha;
+
+import "google/type/datetime.proto";
+import "google/api/annotations.proto";
+import "validator/v1alpha/validator.proto";
+
+// Role message represents a role in the RBAC system
+message Role {
+    int32 id = 1;
+    string name = 2 [(validator.v1alpha.field) = {msg_exists: true, string_not_empty: true}];
+    string description = 3;
+    google.type.DateTime created_at = 4;
+}
+
+// Permission message represents a permission in the RBAC system
+message Permission {
+    int32 id = 1;
+    string name = 2 [(validator.v1alpha.field) = {msg_exists: true, string_not_empty: true}];
+    string resource = 3 [(validator.v1alpha.field) = {msg_exists: true, string_not_empty: true}];
+    string action = 4 [(validator.v1alpha.field) = {msg_exists: true, string_not_empty: true}];
+    string description = 5;
+    google.type.DateTime created_at = 6;
+}
+
+// UserRole message represents a user's role assignment
+message UserRole {
+    int32 user_id = 1;
+    Role role = 2;
+    int32 granted_by = 3;
+    google.type.DateTime granted_at = 4;
+    google.type.DateTime expires_at = 5;
+}
+
+// Role CRUD Request/Response messages
+
+message CreateRoleRequest {
+    string name = 1 [(validator.v1alpha.field) = {msg_exists: true, string_not_empty: true}];
+    string description = 2;
+}
+
+message CreateRoleResponse {
+    Role role = 1;
+}
+
+message GetRoleRequest {
+    int32 id = 1;
+}
+
+message GetRoleResponse {
+    Role role = 1;
+}
+
+message GetRoleByNameRequest {
+    string name = 1 [(validator.v1alpha.field) = {msg_exists: true, string_not_empty: true}];
+}
+
+message GetRoleByNameResponse {
+    Role role = 1;
+}
+
+message ListRolesRequest {}
+
+message ListRolesResponse {
+    repeated Role roles = 1;
+}
+
+message UpdateRoleRequest {
+    int32 id = 1;
+    string name = 2 [(validator.v1alpha.field) = {msg_exists: true, string_not_empty: true}];
+    string description = 3;
+}
+
+message UpdateRoleResponse {
+    Role role = 1;
+}
+
+message DeleteRoleRequest {
+    int32 id = 1;
+}
+
+message DeleteRoleResponse {
+    bool success = 1;
+}
+
+// Permission CRUD Request/Response messages
+
+message CreatePermissionRequest {
+    string name = 1 [(validator.v1alpha.field) = {msg_exists: true, string_not_empty: true}];
+    string resource = 2 [(validator.v1alpha.field) = {msg_exists: true, string_not_empty: true}];
+    string action = 3 [(validator.v1alpha.field) = {msg_exists: true, string_not_empty: true}];
+    string description = 4;
+}
+
+message CreatePermissionResponse {
+    Permission permission = 1;
+}
+
+message GetPermissionRequest {
+    int32 id = 1;
+}
+
+message GetPermissionResponse {
+    Permission permission = 1;
+}
+
+message GetPermissionByNameRequest {
+    string name = 1 [(validator.v1alpha.field) = {msg_exists: true, string_not_empty: true}];
+}
+
+message GetPermissionByNameResponse {
+    Permission permission = 1;
+}
+
+message ListPermissionsRequest {}
+
+message ListPermissionsResponse {
+    repeated Permission permissions = 1;
+}
+
+message UpdatePermissionRequest {
+    int32 id = 1;
+    string name = 2 [(validator.v1alpha.field) = {msg_exists: true, string_not_empty: true}];
+    string resource = 3 [(validator.v1alpha.field) = {msg_exists: true, string_not_empty: true}];
+    string action = 4 [(validator.v1alpha.field) = {msg_exists: true, string_not_empty: true}];
+    string description = 5;
+}
+
+message UpdatePermissionResponse {
+    Permission permission = 1;
+}
+
+message DeletePermissionRequest {
+    int32 id = 1;
+}
+
+message DeletePermissionResponse {
+    bool success = 1;
+}
+
+// Role-Permission Assignment messages
+
+message AssignPermissionToRoleRequest {
+    int32 role_id = 1;
+    int32 permission_id = 2;
+}
+
+message AssignPermissionToRoleResponse {
+    bool success = 1;
+}
+
+message RevokePermissionFromRoleRequest {
+    int32 role_id = 1;
+    int32 permission_id = 2;
+}
+
+message RevokePermissionFromRoleResponse {
+    bool success = 1;
+}
+
+message GetRolePermissionsRequest {
+    int32 role_id = 1;
+}
+
+message GetRolePermissionsResponse {
+    repeated Permission permissions = 1;
+}
+
+// User-Role Assignment messages
+
+message AssignRoleToUserRequest {
+    int32 user_id = 1;
+    int32 role_id = 2;
+    int32 granted_by = 3;
+    google.type.DateTime expires_at = 4;
+}
+
+message AssignRoleToUserResponse {
+    bool success = 1;
+}
+
+message RevokeRoleFromUserRequest {
+    int32 user_id = 1;
+    int32 role_id = 2;
+}
+
+message RevokeRoleFromUserResponse {
+    bool success = 1;
+}
+
+message GetUserRolesRequest {
+    int32 user_id = 1;
+}
+
+message GetUserRolesResponse {
+    repeated Role roles = 1;
+}
+
+message GetUserRoleDetailsRequest {
+    int32 user_id = 1;
+}
+
+message GetUserRoleDetailsResponse {
+    repeated UserRole user_roles = 1;
+}
+
+message GetUsersWithRoleRequest {
+    int32 role_id = 1;
+}
+
+message GetUsersWithRoleResponse {
+    repeated UserRole user_roles = 1;
+}
+
+// Authorization messages
+
+message CheckPermissionRequest {
+    int32 user_id = 1;
+    string permission_name = 2;
+}
+
+message CheckPermissionResponse {
+    bool authorized = 1;
+    string reason = 2;
+}
+
+message CheckPermissionByResourceActionRequest {
+    int32 user_id = 1;
+    string resource = 2;
+    string action = 3;
+}
+
+message CheckPermissionByResourceActionResponse {
+    bool authorized = 1;
+    string reason = 2;
+}
+
+message GetUserPermissionsRequest {
+    int32 user_id = 1;
+}
+
+message GetUserPermissionsResponse {
+    repeated Permission permissions = 1;
+}
+
+// RBAC Service definition
+service RBACService {
+    // Role management
+    rpc CreateRole(CreateRoleRequest) returns (CreateRoleResponse) {
+        option (google.api.http) = {
+            post: "/v1/roles"
+            body: "*"
+        };
+    }
+    
+    rpc GetRole(GetRoleRequest) returns (GetRoleResponse) {
+        option (google.api.http) = {
+            get: "/v1/roles/{id}"
+        };
+    }
+    
+    rpc GetRoleByName(GetRoleByNameRequest) returns (GetRoleByNameResponse) {
+        option (google.api.http) = {
+            get: "/v1/roles/by-name/{name}"
+        };
+    }
+    
+    rpc ListRoles(ListRolesRequest) returns (ListRolesResponse) {
+        option (google.api.http) = {
+            get: "/v1/roles"
+        };
+    }
+    
+    rpc UpdateRole(UpdateRoleRequest) returns (UpdateRoleResponse) {
+        option (google.api.http) = {
+            put: "/v1/roles/{id}"
+            body: "*"
+        };
+    }
+    
+    rpc DeleteRole(DeleteRoleRequest) returns (DeleteRoleResponse) {
+        option (google.api.http) = {
+            delete: "/v1/roles/{id}"
+        };
+    }
+    
+    // Permission management
+    rpc CreatePermission(CreatePermissionRequest) returns (CreatePermissionResponse) {
+        option (google.api.http) = {
+            post: "/v1/permissions"
+            body: "*"
+        };
+    }
+    
+    rpc GetPermission(GetPermissionRequest) returns (GetPermissionResponse) {
+        option (google.api.http) = {
+            get: "/v1/permissions/{id}"
+        };
+    }
+    
+    rpc GetPermissionByName(GetPermissionByNameRequest) returns (GetPermissionByNameResponse) {
+        option (google.api.http) = {
+            get: "/v1/permissions/by-name/{name}"
+        };
+    }
+    
+    rpc ListPermissions(ListPermissionsRequest) returns (ListPermissionsResponse) {
+        option (google.api.http) = {
+            get: "/v1/permissions"
+        };
+    }
+    
+    rpc UpdatePermission(UpdatePermissionRequest) returns (UpdatePermissionResponse) {
+        option (google.api.http) = {
+            put: "/v1/permissions/{id}"
+            body: "*"
+        };
+    }
+    
+    rpc DeletePermission(DeletePermissionRequest) returns (DeletePermissionResponse) {
+        option (google.api.http) = {
+            delete: "/v1/permissions/{id}"
+        };
+    }
+    
+    // Role-Permission assignment
+    rpc AssignPermissionToRole(AssignPermissionToRoleRequest) returns (AssignPermissionToRoleResponse) {
+        option (google.api.http) = {
+            post: "/v1/roles/{role_id}/permissions/{permission_id}"
+        };
+    }
+    
+    rpc RevokePermissionFromRole(RevokePermissionFromRoleRequest) returns (RevokePermissionFromRoleResponse) {
+        option (google.api.http) = {
+            delete: "/v1/roles/{role_id}/permissions/{permission_id}"
+        };
+    }
+    
+    rpc GetRolePermissions(GetRolePermissionsRequest) returns (GetRolePermissionsResponse) {
+        option (google.api.http) = {
+            get: "/v1/roles/{role_id}/permissions"
+        };
+    }
+    
+    // User-Role assignment
+    rpc AssignRoleToUser(AssignRoleToUserRequest) returns (AssignRoleToUserResponse) {
+        option (google.api.http) = {
+            post: "/v1/users/{user_id}/roles/{role_id}"
+            body: "*"
+        };
+    }
+    
+    rpc RevokeRoleFromUser(RevokeRoleFromUserRequest) returns (RevokeRoleFromUserResponse) {
+        option (google.api.http) = {
+            delete: "/v1/users/{user_id}/roles/{role_id}"
+        };
+    }
+    
+    rpc GetUserRoles(GetUserRolesRequest) returns (GetUserRolesResponse) {
+        option (google.api.http) = {
+            get: "/v1/users/{user_id}/roles"
+        };
+    }
+    
+    rpc GetUserRoleDetails(GetUserRoleDetailsRequest) returns (GetUserRoleDetailsResponse) {
+        option (google.api.http) = {
+            get: "/v1/users/{user_id}/role-details"
+        };
+    }
+    
+    rpc GetUsersWithRole(GetUsersWithRoleRequest) returns (GetUsersWithRoleResponse) {
+        option (google.api.http) = {
+            get: "/v1/roles/{role_id}/users"
+        };
+    }
+    
+    // Authorization checks
+    rpc CheckPermission(CheckPermissionRequest) returns (CheckPermissionResponse) {
+        option (google.api.http) = {
+            post: "/v1/check-permission"
+            body: "*"
+        };
+    }
+    
+    rpc CheckPermissionByResourceAction(CheckPermissionByResourceActionRequest) returns (CheckPermissionByResourceActionResponse) {
+        option (google.api.http) = {
+            post: "/v1/check-permission-by-resource-action"
+            body: "*"
+        };
+    }
+    
+    rpc GetUserPermissions(GetUserPermissionsRequest) returns (GetUserPermissionsResponse) {
+        option (google.api.http) = {
+            get: "/v1/users/{user_id}/permissions"
+        };
+    }
+}
+
