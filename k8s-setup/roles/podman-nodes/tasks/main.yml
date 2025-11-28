@@ -3,25 +3,54 @@
   package:
     name:
       - podman
-      - podman-plugins
       - slirp4netns
     state: present
   become: yes
 
-- name: Check if Podman network exists
-  shell: podman network ls --format json | jq -r '.[].Name' | grep -w "{{ pod_network }}"
-  register: network_check
-  failed_when: false
+- name: Remove existing Podman network if present
+  shell: podman network rm -f {{ pod_network }} || true
   changed_when: false
+  ignore_errors: yes
 
 - name: Create Podman network for K8s cluster
   shell: |
     podman network create \
       --driver bridge \
-      --subnet 10.88.0.0/24 \
-      --gateway 10.88.0.1 \
+      --subnet {{ pod_subnet }} \
+      --gateway {{ pod_gateway }} \
       {{ pod_network }}
-  when: network_check.rc != 0
+  register: network_create
+  failed_when: network_create.rc != 0 and 'already exists' not in network_create.stderr
+  changed_when: network_create.rc == 0
+
+- name: Copy CNI config fix script
+  copy:
+    src: fix_cni_config.py
+    dest: /tmp/fix_cni_config.py
+    mode: '0755'
+
+- name: Fix CNI version for firewall plugin compatibility in user directory
+  shell: |
+    CNI_FILE="$HOME/.config/cni/net.d/{{ pod_network }}.conflist"
+    if [ -f "$CNI_FILE" ]; then
+      python3 /tmp/fix_cni_config.py "$CNI_FILE"
+    fi
+  when: network_create.changed
+  changed_when: false
+
+- name: Fix CNI version for firewall plugin compatibility in system directory
+  shell: |
+    CNI_FILE="/etc/cni/net.d/{{ pod_network }}.conflist"
+    if [ -f "$CNI_FILE" ]; then
+      python3 /tmp/fix_cni_config.py "$CNI_FILE"
+    fi
+  when: network_create.changed
+  become: yes
+  changed_when: false
+
+- name: Remove existing containers if present
+  shell: podman rm -f gym-jinni-node1 gym-jinni-node2 gym-jinni-node3 2>/dev/null || true
+  changed_when: false
 
 - name: Create systemd-enabled Podman containers for K8s nodes
   shell: |
@@ -33,16 +62,19 @@
       --privileged \
       --systemd=always \
       --cgroupns=host \
+      --security-opt apparmor=unconfined \
+      --security-opt seccomp=unconfined \
       -v /sys/fs/cgroup:/sys/fs/cgroup:rw \
+      -v /lib/modules:/lib/modules:ro \
       -v {{ item.name }}-data:/var/lib/microk8s:Z \
       -p {{ item.grpc_port }}:{{ item.grpc_port }} \
       -p {{ item.http_port }}:{{ item.http_port }} \
-      docker.io/ubuntu:22.04 \
-      /sbin/init
+      docker.io/jrei/systemd-ubuntu:22.04 \
+      /lib/systemd/systemd
   loop:
-    - { name: 'gym-jinni-node1', ip: '10.88.0.11', grpc_port: '8080', http_port: '8081' }
-    - { name: 'gym-jinni-node2', ip: '10.88.0.12', grpc_port: '8082', http_port: '8083' }
-    - { name: 'gym-jinni-node3', ip: '10.88.0.13', grpc_port: '16443', http_port: '80' }
+    - { name: 'gym-jinni-node1', ip: '10.91.0.11', grpc_port: '8080', http_port: '8081' }
+    - { name: 'gym-jinni-node2', ip: '10.91.0.12', grpc_port: '8082', http_port: '8083' }
+    - { name: 'gym-jinni-node3', ip: '10.91.0.13', grpc_port: '16443', http_port: '8000' }
   register: container_create
   failed_when: container_create.rc != 0 and 'already exists' not in container_create.stderr
   changed_when: container_create.rc == 0
@@ -71,7 +103,9 @@
         iproute2 \
         ca-certificates \
         gnupg \
-        lsb-release
+        lsb-release \
+        apparmor \
+        apparmor-utils
     "
   loop:
     - gym-jinni-node1
@@ -79,6 +113,31 @@
     - gym-jinni-node3
   register: pkg_install
   changed_when: "'0 upgraded, 0 newly installed' not in pkg_install.stdout"
+
+- name: Stop AppArmor service in containers
+  shell: |
+    podman exec {{ item }} bash -c "
+      systemctl stop apparmor || true
+      systemctl disable apparmor || true
+    "
+  loop:
+    - gym-jinni-node1
+    - gym-jinni-node2
+    - gym-jinni-node3
+  changed_when: false
+  ignore_errors: yes
+
+- name: Stop and reset snapd service
+  shell: |
+    podman exec {{ item }} bash -c "
+      systemctl stop snapd.service snapd.socket || true
+      systemctl reset-failed snapd.service snapd.socket || true
+    "
+  loop:
+    - gym-jinni-node1
+    - gym-jinni-node2
+    - gym-jinni-node3
+  changed_when: false
 
 - name: Enable and start snapd in containers
   shell: podman exec {{ item }} systemctl enable --now snapd.socket
@@ -100,6 +159,20 @@
   delay: 5
   register: result
   until: result.rc == 0
+
+- name: Configure AppArmor in containers
+  shell: |
+    podman exec {{ item }} bash -c "
+      mkdir -p /sys/kernel/security/apparmor
+      systemctl restart apparmor || true
+      aa-status || true
+    "
+  loop:
+    - gym-jinni-node1
+    - gym-jinni-node2
+    - gym-jinni-node3
+  changed_when: false
+  ignore_errors: yes
 
 - name: Display container status
   debug:

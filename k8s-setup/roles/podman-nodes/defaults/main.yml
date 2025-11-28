@@ -1,0 +1,5 @@
+---
+pod_network: "gym-jinni-net"
+pod_subnet: "10.91.0.0/24"
+pod_gateway: "10.91.0.1"
+

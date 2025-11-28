@@ -1,0 +1,52 @@
+---
+- name: Setup Podman network and containers for K8s cluster
+  hosts: localhost
+  gather_facts: yes
+  become: no
+  roles:
+    - role: podman-nodes
+      tags: ['podman', 'setup']
+
+- name: Install and configure K3s on all nodes
+  hosts: k8s_cluster
+  gather_facts: yes
+  become: no
+  roles:
+    - role: k3s
+      tags: ['k3s', 'setup']
+
+- name: Configure kubectl access from host
+  hosts: localhost
+  gather_facts: no
+  become: no
+  tasks:
+    - name: Create .kube directory
+      file:
+        path: "{{ ansible_env.HOME }}/.kube"
+        state: directory
+        mode: '0755'
+      tags: ['kubectl']
+
+    - name: Get kubeconfig from control plane
+      shell: podman exec gym-jinni-node1 cat /etc/rancher/k3s/k3s.yaml
+      register: kubeconfig_content
+      changed_when: false
+      tags: ['kubectl']
+
+    - name: Replace localhost with node IP in kubeconfig
+      set_fact:
+        kubeconfig_fixed: "{{ kubeconfig_content.stdout | regex_replace('127.0.0.1', '10.91.0.11') }}"
+      tags: ['kubectl']
+
+    - name: Save kubeconfig
+      copy:
+        content: "{{ kubeconfig_fixed }}"
+        dest: "{{ ansible_env.HOME }}/.kube/gym-jinni-config"
+        mode: '0600'
+      tags: ['kubectl']
+
+    - name: Display kubectl access info
+      debug:
+        msg: "Use: export KUBECONFIG=$HOME/.kube/gym-jinni-config"
+      tags: ['kubectl']
+

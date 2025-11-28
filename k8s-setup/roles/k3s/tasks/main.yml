@@ -1,0 +1,108 @@
+---
+- name: Check if K3s is already installed
+  shell: podman exec {{ container_name }} which k3s
+  register: k3s_check
+  failed_when: false
+  changed_when: false
+
+- name: Install fuse-overlayfs
+  shell: |
+    podman exec {{ container_name }} bash -c "
+      apt-get update && apt-get install -y fuse-overlayfs
+    "
+  when: k3s_check.rc != 0
+  changed_when: false
+
+- name: Download K3s binary
+  shell: |
+    podman exec {{ container_name }} bash -c "
+      curl -sfL https://get.k3s.io | INSTALL_K3S_SKIP_START=true INSTALL_K3S_SKIP_ENABLE=true sh -
+    "
+  when: k3s_check.rc != 0
+  register: k3s_download
+  retries: 3
+  delay: 10
+  until: k3s_download.rc == 0
+
+- name: Start K3s server on control plane
+  shell: |
+    podman exec {{ container_name }} bash -c "
+      nohup k3s server \
+        --disable traefik \
+        --disable servicelb \
+        --write-kubeconfig-mode 644 \
+        --node-name {{ container_name }} \
+        --bind-address 0.0.0.0 \
+        --advertise-address {{ node_ip }} \
+        --tls-san {{ node_ip }} \
+        --snapshotter=fuse-overlayfs \
+        > /var/log/k3s.log 2>&1 &
+      
+      echo \$! > /var/run/k3s.pid
+    "
+  when: is_control_plane | default(false)
+  changed_when: true
+
+- name: Wait for K3s server to be ready
+  shell: podman exec {{ container_name }} k3s kubectl get nodes
+  register: k3s_ready
+  retries: 30
+  delay: 2
+  until: k3s_ready.rc == 0
+  when: is_control_plane | default(false)
+  changed_when: false
+
+- name: Wait for K3s token file to be created
+  shell: podman exec {{ container_name }} test -f /var/lib/rancher/k3s/server/node-token
+  register: token_check
+  retries: 30
+  delay: 2
+  until: token_check.rc == 0
+  when: is_control_plane | default(false)
+  changed_when: false
+
+- name: Get K3s token from control plane
+  shell: podman exec {{ container_name }} cat /var/lib/rancher/k3s/server/node-token
+  register: k3s_token
+  when: is_control_plane | default(false)
+  changed_when: false
+
+- name: Start K3s agent on worker nodes
+  shell: |
+    podman exec {{ container_name }} bash -c "
+      nohup env K3S_URL=https://{{ hostvars['node1']['node_ip'] }}:6443 \
+      K3S_TOKEN={{ hostvars['node1']['k3s_token'].stdout }} \
+      k3s agent \
+        --node-name {{ container_name }} \
+        > /var/log/k3s.log 2>&1 &
+      
+      echo \$! > /var/run/k3s-agent.pid
+      sleep 5
+    "
+  when: not (is_control_plane | default(false))
+  changed_when: true
+
+- name: Configure firewall rules for K3s
+  shell: |
+    podman exec {{ container_name }} bash -c "
+    iptables -P FORWARD ACCEPT
+    iptables -P INPUT ACCEPT
+    iptables -P OUTPUT ACCEPT
+    "
+  changed_when: false
+
+- name: Add kubectl alias to bashrc
+  shell: podman exec {{ container_name }} bash -c "echo \"alias kubectl='k3s kubectl'\" >> /root/.bashrc"
+  changed_when: false
+
+- name: Display K3s status
+  shell: podman exec {{ container_name }} k3s kubectl get nodes
+  register: k3s_status
+  changed_when: false
+  when: is_control_plane | default(false)
+
+- name: Show status
+  debug:
+    msg: "{{ k3s_status.stdout_lines }}"
+  when: is_control_plane | default(false)
+

@@ -121,15 +121,22 @@ echo ""
 
 # Step 6: Clean up Docker images (optional)
 echo -e "${YELLOW}Step 6: Cleaning up Docker images...${NC}"
-read -p "Do you want to remove built Docker images? (yes/no): " -r
-echo ""
-if [[ $REPLY =~ ^[Yy][Ee][Ss]$ ]]; then
+if [ "$FORCE" = false ]; then
+    read -p "Do you want to remove built Docker images? (yes/no): " -r
+    echo ""
+    if [[ $REPLY =~ ^[Yy][Ee][Ss]$ ]]; then
+        podman rmi gym-jinni/csr-service:latest 2>/dev/null || true
+        podman rmi gym-jinni/service:latest 2>/dev/null || true
+        podman rmi gym-jinni/ui:latest 2>/dev/null || true
+        echo -e "${GREEN}✓ Docker images removed${NC}"
+    else
+        echo -e "${YELLOW}⚠ Skipping Docker image removal${NC}"
+    fi
+else
     podman rmi gym-jinni/csr-service:latest 2>/dev/null || true
     podman rmi gym-jinni/service:latest 2>/dev/null || true
     podman rmi gym-jinni/ui:latest 2>/dev/null || true
     echo -e "${GREEN}✓ Docker images removed${NC}"
-else
-    echo -e "${YELLOW}⚠ Skipping Docker image removal${NC}"
 fi
 echo ""
 

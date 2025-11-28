@@ -2,6 +2,7 @@
 - name: Setup Podman network and containers for K8s cluster
   hosts: localhost
   gather_facts: yes
+  become: no
   roles:
     - role: podman-nodes
       tags: ['podman', 'setup']
@@ -9,6 +10,7 @@
 - name: Install and configure MicroK8s on all nodes
   hosts: k8s_cluster
   gather_facts: yes
+  become: no
   roles:
     - role: microk8s
       tags: ['microk8s', 'setup']
@@ -16,9 +18,10 @@
 - name: Join worker nodes to control plane
   hosts: control_plane
   gather_facts: no
+  become: no
   tasks:
     - name: Generate join token
-      shell: microk8s add-node --token-ttl 3600 | grep "microk8s join" | head -1
+      shell: podman exec {{ container_name }} bash -c "microk8s add-node --token-ttl 3600 | grep 'microk8s join' | head -1"
       register: join_command
       changed_when: false
       tags: ['microk8s', 'join']
@@ -31,9 +34,10 @@
 - name: Execute join on worker nodes
   hosts: workers
   gather_facts: no
+  become: no
   tasks:
     - name: Join worker to cluster
-      shell: "{{ hostvars['node1']['microk8s_join_command'] }}"
+      shell: podman exec {{ container_name }} bash -c "{{ hostvars['node1']['microk8s_join_command'] }}"
       args:
         creates: /var/snap/microk8s/current/var/lock/clustered.lock
       tags: ['microk8s', 'join']
@@ -41,6 +45,7 @@
 - name: Configure kubectl access from host
   hosts: localhost
   gather_facts: no
+  become: no
   tasks:
     - name: Create .kube directory
       file:

@@ -56,8 +56,8 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Step 1: Setup cluster
-echo -e "${YELLOW}Step 1: Setting up Podman containers and MicroK8s cluster...${NC}"
-ansible-playbook playbooks/setup-cluster.yml
+echo -e "${YELLOW}Step 1: Setting up Podman containers and K3s cluster...${NC}"
+ansible-playbook playbooks/setup-cluster-k3s.yml
 
 if [ $? -ne 0 ]; then
     echo -e "${RED}Failed to setup cluster${NC}"
@@ -129,7 +129,7 @@ echo ""
 echo "  # Port forward to access services"
 echo "  kubectl port-forward -n gym-jinni svc/csr-service 8082:8082 8083:8083"
 echo "  kubectl port-forward -n gym-jinni svc/main-service 8080:8080 8081:8081"
-echo "  kubectl port-forward -n gym-jinni svc/ui 8000:80"
+echo "  kubectl port-forward -n gym-jinni svc/ui 3000:80"
 echo ""
 echo "  # Access Podman containers directly"
 echo "  podman exec -it gym-jinni-node1 bash"
@@ -143,7 +143,7 @@ echo "  CSR Service gRPC:  localhost:8082"
 echo "  CSR Service HTTP:  http://localhost:8083/v1/roles"
 echo "  Main Service gRPC: localhost:8080"
 echo "  Main Service HTTP: http://localhost:8081/v1/users"
-echo "  UI:                http://localhost:8000"
+echo "  UI:                http://localhost:3000"
 echo ""
 echo -e "${GREEN}Happy testing!${NC}"
 
