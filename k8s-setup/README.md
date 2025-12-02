@@ -1,19 +1,18 @@
 # Kubernetes Test Environment for gym-jinni
 
-This directory contains the complete setup for a 3-node MicroK8s cluster running in Podman containers, orchestrated by Ansible, with CI/CD pipelines for the gym-jinni project.
+This directory contains the complete setup for a Kubernetes cluster using k3d, orchestrated by Ansible, with CI/CD pipelines for the gym-jinni project.
 
 ## Architecture
 
-- **3 Podman containers** acting as Kubernetes nodes
-  - `gym-jinni-node1`: Control plane + worker
-  - `gym-jinni-node2`: Worker node
-  - `gym-jinni-node3`: Worker node
-- **MicroK8s** cluster with DNS, storage, ingress, and metrics
+- **k3d cluster** (K3s in Docker) with 1 server + 2 agent nodes
+  - Lightweight Kubernetes distribution designed for containers
+  - Handles all cgroup and AppArmor complexities automatically
+  - Fast setup and teardown
 - **Services deployed**:
   - PostgreSQL (StatefulSet with persistent storage)
   - CSR Service (RBAC) - gRPC: 8082, HTTP: 8083
   - Main Service (User/Class) - gRPC: 8080, HTTP: 8081
-  - UI (Flutter web) - HTTP: 80
+  - UI (Flutter web) - HTTP: 3000
 - **Ansible** playbooks for automation
 - **CI/CD** pipelines (GitHub Actions & GitLab CI)
 
@@ -24,14 +23,18 @@ Install the following on your host machine:
 ```bash
 # Ubuntu/Debian
 sudo apt-get update
-sudo apt-get install -y podman ansible python3-pip
+sudo apt-get install -y ansible python3-pip docker.io kubectl
 
 # Arch Linux
-sudo pacman -S podman ansible python
+sudo pacman -S ansible python docker kubectl
 
 # macOS
-brew install podman ansible
+brew install ansible docker kubectl
+
+# k3d will be automatically installed by the setup script
 ```
+
+**Note:** k3d works with both Docker and Podman. If using Podman, ensure it's configured with Docker compatibility.
 
 ## Quick Start
 
@@ -44,12 +47,11 @@ chmod +x setup.sh
 ```
 
 This will:
-1. Create 3 Podman containers
-2. Install MicroK8s on each container
-3. Form a 3-node cluster
+1. Install k3d (if not already installed)
+2. Create a k3d cluster with 1 server + 2 agents
+3. Configure kubectl access
 4. Build Docker images for all services
 5. Deploy all services to Kubernetes
-6. Configure kubectl access
 
 ### 2. Access the cluster
 
@@ -106,7 +108,7 @@ If you want more control, run Ansible playbooks manually:
 
 ```bash
 cd k8s-setup
-ansible-playbook playbooks/setup-cluster.yml
+ansible-playbook playbooks/setup-cluster-k3d.yml
 ```
 
 ### 2. Build and deploy services
@@ -134,13 +136,12 @@ kubectl get nodes
 ```
 k8s-setup/
 ├── ansible.cfg                 # Ansible configuration
-├── inventory.yml               # Inventory for 3 nodes
+├── inventory.yml               # Simplified inventory for localhost
 ├── playbooks/
-│   ├── setup-cluster.yml       # Setup Podman + MicroK8s
+│   ├── setup-cluster-k3d.yml   # Setup k3d cluster
 │   └── deploy-services.yml     # Build + deploy services
 ├── roles/
-│   ├── podman-nodes/           # Create Podman containers
-│   ├── microk8s/               # Install MicroK8s
+│   ├── k3d/                    # Install k3d and create cluster
 │   ├── build-images/           # Build Docker images
 │   └── gym-jinni/              # Deploy to K8s
 ├── manifests/
@@ -156,6 +157,7 @@ k8s-setup/
 │   ├── Dockerfile.csr-service
 │   ├── Dockerfile.service
 │   └── Dockerfile.ui
+├── archive/                    # Old Podman/MicroK8s/K3s implementation
 ├── setup.sh                    # One-command setup
 ├── teardown.sh                 # One-command cleanup
 └── README.md                   # This file
@@ -187,20 +189,26 @@ kubectl exec -it <pod-name> -n gym-jinni -- /bin/sh
 kubectl scale deployment csr-service --replicas=3 -n gym-jinni
 ```
 
-### Podman Container Access
+### k3d Cluster Management
 
 ```bash
-# List containers
-podman ps
+# List k3d clusters
+k3d cluster list
 
-# Access container shell
-podman exec -it gym-jinni-node1 bash
+# List k3d nodes
+k3d node list
 
-# View MicroK8s status in container
-podman exec gym-jinni-node1 microk8s status
+# Access k3d node shell (if needed)
+docker exec -it k3d-gym-jinni-server-0 sh
 
-# View MicroK8s logs
-podman exec gym-jinni-node1 microk8s kubectl logs -n kube-system -l k8s-app=kube-dns
+# Stop cluster (preserves state)
+k3d cluster stop gym-jinni
+
+# Start cluster
+k3d cluster start gym-jinni
+
+# View k3d cluster info
+kubectl cluster-info
 ```
 
 ### Debugging
@@ -247,31 +255,30 @@ The `.gitlab-ci.yml` pipeline:
 
 ## Troubleshooting
 
-### Podman containers won't start
+### k3d cluster won't start
 
 ```bash
-# Check if systemd is working
-podman exec gym-jinni-node1 systemctl status
+# Check Docker is running
+docker ps
 
-# Restart container
-podman restart gym-jinni-node1
-```
+# Check k3d version
+k3d version
 
-### MicroK8s installation fails
-
-```bash
-# Check snapd status
-podman exec gym-jinni-node1 systemctl status snapd
-
-# Manually install MicroK8s
-podman exec gym-jinni-node1 snap install microk8s --classic
+# Delete and recreate cluster
+k3d cluster delete gym-jinni
+./setup.sh
 ```
 
 ### Services not deploying
 
 ```bash
-# Check if images are imported
-podman exec gym-jinni-node1 microk8s ctr images ls | grep gym-jinni
+# Check if images are available
+docker images | grep gym-jinni
+
+# Import images to k3d cluster
+k3d image import gym-jinni/csr-service:latest -c gym-jinni
+k3d image import gym-jinni/service:latest -c gym-jinni
+k3d image import gym-jinni/ui:latest -c gym-jinni
 
 # Check pod events
 kubectl describe pod <pod-name> -n gym-jinni
@@ -280,16 +287,30 @@ kubectl describe pod <pod-name> -n gym-jinni
 kubectl logs <pod-name> -n gym-jinni
 ```
 
-### Network issues
+### Network/Port issues
 
 ```bash
-# Check Podman network
-podman network ls
-podman network inspect gym-jinni-net
+# Check k3d cluster ports
+k3d cluster list
 
-# Check K8s network
-kubectl get pods -n kube-system
-kubectl logs -n kube-system -l k8s-app=kube-dns
+# Check if ports are in use
+netstat -tulpn | grep -E '8080|8081|8082|8083|3000'
+
+# Recreate cluster with different ports if needed
+k3d cluster delete gym-jinni
+# Edit roles/k3d/defaults/main.yml to change ports
+./setup.sh
+```
+
+### kubectl can't connect
+
+```bash
+# Check kubeconfig
+export KUBECONFIG=$HOME/.kube/gym-jinni-config
+kubectl cluster-info
+
+# Get fresh kubeconfig
+k3d kubeconfig get gym-jinni > $HOME/.kube/gym-jinni-config
 ```
 
 ### Database connection issues

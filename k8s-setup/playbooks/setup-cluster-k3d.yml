@@ -1,0 +1,34 @@
+---
+- name: Setup k3d Kubernetes cluster
+  hosts: localhost
+  gather_facts: yes
+  become: no
+  roles:
+    - role: k3d
+      tags: ['k3d', 'setup']
+
+- name: Display kubectl access info
+  hosts: localhost
+  gather_facts: no
+  become: no
+  tasks:
+    - name: Display success message
+      debug:
+        msg:
+          - "=========================================="
+          - "k3d cluster created successfully!"
+          - "=========================================="
+          - ""
+          - "Cluster name: gym-jinni"
+          - "Kubeconfig: {{ ansible_env.HOME }}/.kube/gym-jinni-config"
+          - ""
+          - "To use kubectl:"
+          - "  export KUBECONFIG=$HOME/.kube/gym-jinni-config"
+          - ""
+          - "Useful commands:"
+          - "  kubectl get nodes"
+          - "  kubectl get pods -A"
+          - "  k3d cluster list"
+          - "  k3d node list"
+      tags: ['k3d']
+

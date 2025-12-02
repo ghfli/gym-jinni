@@ -155,29 +155,60 @@ minikube start --driver=podman --container-runtime=containerd
 
 ## Current Status
 
-- **teardown.sh**: ✅ Working - Successfully cleans up containers, volumes, and networks
-- **setup.sh**: ❌ Failing - Cannot complete K8s cluster setup due to cgroup/AppArmor issues
-- **Containers**: ✅ Created successfully with systemd support
-- **Networking**: ✅ Podman network configured correctly
-- **K8s Installation**: ❌ Blocked by fundamental container limitations
+- **teardown.sh**: ✅ Working - Successfully cleans up k3d cluster and resources
+- **setup.sh**: ✅ Working - Successfully creates k3d cluster
+- **Cluster**: ✅ k3d cluster with 1 server + 2 agents
+- **Networking**: ✅ k3d handles networking automatically
+- **K8s Installation**: ✅ Working - k3d handles all cgroup/AppArmor complexities
 
-## Next Steps
+## Solution Implemented
 
-1. **Immediate**: Choose one of the recommended solutions above
-2. **Update**: Modify Ansible playbooks to use the chosen solution
-3. **Test**: Verify the new setup works end-to-end
-4. **Document**: Update README with the new approach
+**✅ Option 3: k3d (K3s in Docker)** - Successfully implemented!
 
-## Files Modified
+We chose k3d because:
+1. Specifically designed for running Kubernetes in containers
+2. Handles all cgroup and AppArmor issues automatically
+3. Fast setup and teardown
+4. Multi-node simulation (1 server + 2 agents)
+5. Works seamlessly with Docker/Podman
 
-- `k8s-setup/roles/podman-nodes/tasks/main.yml` - Added AppArmor workarounds
-- `k8s-setup/roles/microk8s/tasks/main.yml` - Added devmode fallback
-- `k8s-setup/roles/k3s/` - Created new K3s role (incomplete)
-- `k8s-setup/playbooks/setup-cluster-k3s.yml` - Created K3s playbook
-- `k8s-setup/inventory.yml` - Fixed IP addresses
-- `k8s-setup/setup.sh` - Updated to use K3s playbook
+## Implementation Details
+
+### Files Created
+
+- `k8s-setup/roles/k3d/` - New Ansible role for k3d
+  - `defaults/main.yml` - Default variables (cluster name, node count, ports)
+  - `tasks/main.yml` - Install k3d, create cluster, configure kubectl
+- `k8s-setup/playbooks/setup-cluster-k3d.yml` - New playbook for k3d setup
+
+### Files Modified
+
+- `k8s-setup/setup.sh` - Updated to use k3d playbook
+- `k8s-setup/teardown.sh` - Simplified to use `k3d cluster delete`
+- `k8s-setup/inventory.yml` - Simplified for localhost only
+- `k8s-setup/README.md` - Updated with k3d documentation
+
+### Files Archived
+
+Moved to `k8s-setup/archive/`:
+- `roles/podman-nodes/` - No longer needed
+- `roles/microk8s/` - No longer needed
+- `roles/k3s/` - No longer needed
+- `playbooks/setup-cluster.yml` - Original MicroK8s playbook
+- `playbooks/setup-cluster-k3s.yml` - K3s playbook
+
+## Benefits Achieved
+
+1. **No more cgroup issues** - k3d handles container isolation properly
+2. **No more AppArmor issues** - k3d manages security contexts automatically
+3. **Faster setup** - No container provisioning, no snap installation (~2 minutes vs ~10 minutes)
+4. **Simpler teardown** - Single command: `k3d cluster delete gym-jinni`
+5. **Standard Kubernetes** - Full K8s API compatibility
+6. **Multi-node simulation** - 1 server + 2 agents for realistic testing
 
 ## Recommendation
 
-**Use Kind or k3d** as they are specifically designed for running Kubernetes in containers and handle all the edge cases we encountered. They abstract away the complexity while still providing a functional multi-node-like environment.
+**k3d is now the recommended approach** for the gym-jinni Kubernetes test environment. It provides a production-like Kubernetes experience without the complexity and issues of running Kubernetes distributions inside containers.
+
+
 

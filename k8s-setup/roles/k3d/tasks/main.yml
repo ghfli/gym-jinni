@@ -1,0 +1,89 @@
+---
+- name: Check if k3d is installed
+  shell: command -v k3d
+  register: k3d_check
+  changed_when: false
+  failed_when: false
+
+- name: Install k3d
+  block:
+    - name: Download k3d installation script
+      get_url:
+        url: https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh
+        dest: /tmp/k3d-install.sh
+        mode: '0755'
+      when: k3d_check.rc != 0
+
+    - name: Run k3d installation script
+      shell: bash /tmp/k3d-install.sh
+      become: yes
+      when: k3d_check.rc != 0
+
+    - name: Remove installation script
+      file:
+        path: /tmp/k3d-install.sh
+        state: absent
+      when: k3d_check.rc != 0
+  when: k3d_check.rc != 0
+
+- name: Check if k3d cluster already exists
+  shell: sudo k3d cluster list | grep -w "{{ k3d_cluster_name }}"
+  register: cluster_check
+  changed_when: false
+  failed_when: false
+
+- name: Delete existing k3d cluster if present
+  shell: sudo k3d cluster delete {{ k3d_cluster_name }}
+  when: cluster_check.rc == 0
+  register: cluster_delete
+  changed_when: cluster_delete.rc == 0
+
+- name: Create k3d cluster
+  shell: |
+    sudo -E k3d cluster create {{ k3d_cluster_name }} \
+      --servers {{ k3d_servers }} \
+      --agents {{ k3d_agents }} \
+      --api-port {{ k3d_api_port }} \
+      {% for port in k3d_port_mappings %}
+      --port {{ port }} \
+      {% endfor %}
+      --wait
+  register: cluster_create
+  changed_when: cluster_create.rc == 0
+
+- name: Create .kube directory
+  file:
+    path: "{{ ansible_env.HOME }}/.kube"
+    state: directory
+    mode: '0755'
+
+- name: Export kubeconfig
+  shell: sudo k3d kubeconfig get {{ k3d_cluster_name }} > {{ k3d_kubeconfig_path }}
+  register: kubeconfig_export
+  changed_when: kubeconfig_export.rc == 0
+
+- name: Set kubeconfig permissions
+  file:
+    path: "{{ k3d_kubeconfig_path }}"
+    mode: '0600'
+
+- name: Wait for cluster to be ready
+  shell: |
+    export KUBECONFIG={{ k3d_kubeconfig_path }}
+    kubectl wait --for=condition=ready node --all --timeout=300s
+  register: cluster_ready
+  retries: 5
+  delay: 10
+  until: cluster_ready.rc == 0
+
+- name: Display cluster info
+  shell: |
+    export KUBECONFIG={{ k3d_kubeconfig_path }}
+    kubectl get nodes
+  register: nodes_output
+  changed_when: false
+
+- name: Show cluster nodes
+  debug:
+    msg: "{{ nodes_output.stdout_lines }}"
+

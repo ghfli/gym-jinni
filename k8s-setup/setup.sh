@@ -15,8 +15,8 @@ echo ""
 # Check prerequisites
 echo -e "${YELLOW}Checking prerequisites...${NC}"
 
-command -v podman >/dev/null 2>&1 || { echo -e "${RED}Error: podman is not installed${NC}" >&2; exit 1; }
 command -v ansible-playbook >/dev/null 2>&1 || { echo -e "${RED}Error: ansible is not installed${NC}" >&2; exit 1; }
+command -v kubectl >/dev/null 2>&1 || { echo -e "${RED}Error: kubectl is not installed${NC}" >&2; exit 1; }
 
 echo -e "${GREEN}✓ Prerequisites check passed${NC}"
 echo ""
@@ -56,8 +56,8 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Step 1: Setup cluster
-echo -e "${YELLOW}Step 1: Setting up Podman containers and K3s cluster...${NC}"
-ansible-playbook playbooks/setup-cluster-k3s.yml
+echo -e "${YELLOW}Step 1: Setting up k3d Kubernetes cluster...${NC}"
+ansible-playbook playbooks/setup-cluster-k3d.yml
 
 if [ $? -ne 0 ]; then
     echo -e "${RED}Failed to setup cluster${NC}"
@@ -131,11 +131,12 @@ echo "  kubectl port-forward -n gym-jinni svc/csr-service 8082:8082 8083:8083"
 echo "  kubectl port-forward -n gym-jinni svc/main-service 8080:8080 8081:8081"
 echo "  kubectl port-forward -n gym-jinni svc/ui 3000:80"
 echo ""
-echo "  # Access Podman containers directly"
-echo "  podman exec -it gym-jinni-node1 bash"
+echo "  # View k3d cluster info"
+echo "  k3d cluster list"
+echo "  k3d node list"
 echo ""
-echo "  # View MicroK8s status"
-echo "  podman exec gym-jinni-node1 microk8s status"
+echo "  # Access k3d nodes directly (if needed)"
+echo "  docker exec -it k3d-gym-jinni-server-0 sh"
 echo ""
 echo -e "${YELLOW}Service Endpoints (after port-forward):${NC}"
 echo ""

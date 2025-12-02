@@ -42,10 +42,9 @@ if [ "$FORCE" = false ]; then
     echo ""
     echo "This will:"
     echo "  - Delete all Kubernetes resources in gym-jinni namespace"
-    echo "  - Stop and remove all Podman containers (node1, node2, node3)"
-    echo "  - Remove Podman network"
-    echo "  - Remove Podman volumes"
+    echo "  - Delete the k3d cluster"
     echo "  - Remove kubeconfig file"
+    echo "  - Optionally remove Docker images"
     echo ""
     read -p "Are you sure you want to continue? (yes/no): " -r
     echo ""
@@ -70,46 +69,23 @@ else
 fi
 echo ""
 
-# Step 2: Stop and remove Podman containers
-echo -e "${YELLOW}Step 2: Stopping and removing Podman containers...${NC}"
+# Step 2: Delete k3d cluster
+echo -e "${YELLOW}Step 2: Deleting k3d cluster...${NC}"
 
-for container in gym-jinni-node1 gym-jinni-node2 gym-jinni-node3; do
-    if podman ps -a --format "{{.Names}}" | grep -q "^${container}$"; then
-        echo "Stopping and removing ${container}..."
-        podman stop ${container} 2>/dev/null || true
-        podman rm -f ${container} 2>/dev/null || true
+if command -v k3d >/dev/null 2>&1; then
+    if k3d cluster list | grep -q "gym-jinni"; then
+        k3d cluster delete gym-jinni 2>/dev/null || true
+        echo -e "${GREEN}✓ k3d cluster deleted${NC}"
+    else
+        echo -e "${YELLOW}⚠ k3d cluster not found${NC}"
     fi
-done
-
-echo -e "${GREEN}✓ Containers removed${NC}"
-echo ""
-
-# Step 3: Remove Podman volumes
-echo -e "${YELLOW}Step 3: Removing Podman volumes...${NC}"
-
-for volume in gym-jinni-node1-data gym-jinni-node2-data gym-jinni-node3-data; do
-    if podman volume ls --format "{{.Name}}" | grep -q "^${volume}$"; then
-        echo "Removing volume ${volume}..."
-        podman volume rm ${volume} 2>/dev/null || true
-    fi
-done
-
-echo -e "${GREEN}✓ Volumes removed${NC}"
-echo ""
-
-# Step 4: Remove Podman network
-echo -e "${YELLOW}Step 4: Removing Podman network...${NC}"
-
-if podman network ls --format "{{.Name}}" | grep -q "^gym-jinni-net$"; then
-    podman network rm gym-jinni-net 2>/dev/null || true
-    echo -e "${GREEN}✓ Network removed${NC}"
 else
-    echo -e "${YELLOW}⚠ Network not found${NC}"
+    echo -e "${YELLOW}⚠ k3d not installed, skipping cluster deletion${NC}"
 fi
 echo ""
 
-# Step 5: Clean up kubeconfig
-echo -e "${YELLOW}Step 5: Cleaning up kubeconfig...${NC}"
+# Step 3: Clean up kubeconfig
+echo -e "${YELLOW}Step 3: Cleaning up kubeconfig...${NC}"
 
 if [ -f "$HOME/.kube/gym-jinni-config" ]; then
     rm -f "$HOME/.kube/gym-jinni-config"
@@ -119,30 +95,30 @@ else
 fi
 echo ""
 
-# Step 6: Clean up Docker images (optional)
-echo -e "${YELLOW}Step 6: Cleaning up Docker images...${NC}"
+# Step 4: Clean up Docker images (optional)
+echo -e "${YELLOW}Step 4: Cleaning up Docker images...${NC}"
 if [ "$FORCE" = false ]; then
     read -p "Do you want to remove built Docker images? (yes/no): " -r
     echo ""
     if [[ $REPLY =~ ^[Yy][Ee][Ss]$ ]]; then
-        podman rmi gym-jinni/csr-service:latest 2>/dev/null || true
-        podman rmi gym-jinni/service:latest 2>/dev/null || true
-        podman rmi gym-jinni/ui:latest 2>/dev/null || true
+        docker rmi gym-jinni/csr-service:latest 2>/dev/null || true
+        docker rmi gym-jinni/service:latest 2>/dev/null || true
+        docker rmi gym-jinni/ui:latest 2>/dev/null || true
         echo -e "${GREEN}✓ Docker images removed${NC}"
     else
         echo -e "${YELLOW}⚠ Skipping Docker image removal${NC}"
     fi
 else
-    podman rmi gym-jinni/csr-service:latest 2>/dev/null || true
-    podman rmi gym-jinni/service:latest 2>/dev/null || true
-    podman rmi gym-jinni/ui:latest 2>/dev/null || true
+    docker rmi gym-jinni/csr-service:latest 2>/dev/null || true
+    docker rmi gym-jinni/service:latest 2>/dev/null || true
+    docker rmi gym-jinni/ui:latest 2>/dev/null || true
     echo -e "${GREEN}✓ Docker images removed${NC}"
 fi
 echo ""
 
 # Final cleanup
 echo -e "${YELLOW}Performing final cleanup...${NC}"
-podman system prune -f 2>/dev/null || true
+docker system prune -f 2>/dev/null || true
 
 echo ""
 echo -e "${GREEN}========================================${NC}"

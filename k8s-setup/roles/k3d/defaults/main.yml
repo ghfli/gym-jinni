@@ -1,0 +1,18 @@
+---
+# Default variables for k3d role
+k3d_version: "v5.6.0"
+k3d_cluster_name: "gym-jinni"
+k3d_servers: 1
+k3d_agents: 2
+k3d_api_port: 6443
+k3d_kubeconfig_path: "{{ ansible_env.HOME }}/.kube/gym-jinni-config"
+
+# Port mappings for services
+# Format: host_port:container_port@loadbalancer
+k3d_port_mappings:
+  - "8080:30080@loadbalancer"  # Main service gRPC
+  - "8081:30081@loadbalancer"  # Main service HTTP
+  - "8082:30082@loadbalancer"  # CSR service gRPC
+  - "8083:30083@loadbalancer"  # CSR service HTTP
+  - "3000:30000@loadbalancer"  # UI
+

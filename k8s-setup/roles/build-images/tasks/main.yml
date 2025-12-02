@@ -8,63 +8,40 @@
 - name: Build CSR service Docker image
   shell: |
     cd {{ playbook_dir }}/../../
-    podman build -f k8s-setup/docker/Dockerfile.csr-service -t gym-jinni/csr-service:latest .
+    sudo docker build -f k8s-setup/docker/Dockerfile.csr-service -t gym-jinni/csr-service:latest .
   args:
     chdir: "{{ playbook_dir }}/../../"
   register: build_csr
-  changed_when: "'Successfully tagged' in build_csr.stdout or 'Writing manifest' in build_csr.stderr"
+  changed_when: "'Successfully tagged' in build_csr.stdout or 'Successfully built' in build_csr.stdout"
 
 - name: Build main service Docker image
   shell: |
     cd {{ playbook_dir }}/../../
-    podman build -f k8s-setup/docker/Dockerfile.service -t gym-jinni/service:latest .
+    sudo docker build -f k8s-setup/docker/Dockerfile.service -t gym-jinni/service:latest .
   args:
     chdir: "{{ playbook_dir }}/../../"
   register: build_service
-  changed_when: "'Successfully tagged' in build_service.stdout or 'Writing manifest' in build_service.stderr"
+  changed_when: "'Successfully tagged' in build_service.stdout or 'Successfully built' in build_service.stdout"
 
 - name: Build UI Docker image
   shell: |
     cd {{ playbook_dir }}/../../
-    podman build -f k8s-setup/docker/Dockerfile.ui -t gym-jinni/ui:latest .
+    sudo docker build -f k8s-setup/docker/Dockerfile.ui -t gym-jinni/ui:latest .
   args:
     chdir: "{{ playbook_dir }}/../../"
   register: build_ui
-  changed_when: "'Successfully tagged' in build_ui.stdout or 'Writing manifest' in build_ui.stderr"
+  changed_when: "'Successfully tagged' in build_ui.stdout or 'Successfully built' in build_ui.stdout"
 
-- name: Save images to tar files
-  shell: podman save -o /tmp/{{ item.name }}.tar {{ item.image }}
+- name: Import images into k3d cluster
+  shell: sudo k3d image import {{ item }} -c gym-jinni
   loop:
-    - { name: 'csr-service', image: 'gym-jinni/csr-service:latest' }
-    - { name: 'service', image: 'gym-jinni/service:latest' }
-    - { name: 'ui', image: 'gym-jinni/ui:latest' }
-
-- name: Copy images to control plane node
-  shell: |
-    podman cp /tmp/{{ item }}.tar gym-jinni-node1:/tmp/
-  loop:
-    - csr-service
-    - service
-    - ui
-
-- name: Import images into MicroK8s
-  shell: |
-    podman exec gym-jinni-node1 bash -c "microk8s ctr image import /tmp/{{ item }}.tar"
-  loop:
-    - csr-service
-    - service
-    - ui
-
-- name: Clean up tar files
-  file:
-    path: "/tmp/{{ item }}.tar"
-    state: absent
-  loop:
-    - csr-service
-    - service
-    - ui
+    - gym-jinni/csr-service:latest
+    - gym-jinni/service:latest
+    - gym-jinni/ui:latest
+  register: import_result
+  changed_when: import_result.rc == 0
 
 - name: Display build status
   debug:
-    msg: "All Docker images built and imported to MicroK8s"
+    msg: "All Docker images built and imported to k3d cluster"
 

@@ -1,33 +1,7 @@
 all:
   children:
-    k8s_cluster:
-      children:
-        control_plane:
-          hosts:
-            node1:
-              ansible_connection: local
-              container_name: gym-jinni-node1
-              node_ip: 10.91.0.11
-              is_control_plane: true
-        workers:
-          hosts:
-            node2:
-              ansible_connection: local
-              container_name: gym-jinni-node2
-              node_ip: 10.91.0.12
-            node3:
-              ansible_connection: local
-              container_name: gym-jinni-node3
-              node_ip: 10.91.0.13
-      vars:
-        ansible_user: root
-        ansible_podman_executable: /usr/bin/podman
-        microk8s_version: "1.28/stable"
-        pod_network: "gym-jinni-net"
-        
     localhost:
       hosts:
         127.0.0.1:
           ansible_connection: local
           ansible_python_interpreter: /usr/bin/python3
-
