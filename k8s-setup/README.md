@@ -75,7 +75,7 @@ Port forward to access services from your host:
 
 ```bash
 # CSR Service
-kubectl port-forward -n gym-jinni svc/csr-service 8082:8082 8083:8083
+kubectl port-forward -n gym-jinni svc/main-service 8080:8080 8081:8081
 
 # Main Service
 kubectl port-forward -n gym-jinni svc/main-service 8080:8080 8081:8081
@@ -149,12 +149,10 @@ k8s-setup/
 │   ├── secrets.yml
 │   ├── configmaps.yml
 │   ├── postgres-statefulset.yml
-│   ├── csr-service-deployment.yml
 │   ├── main-service-deployment.yml
 │   ├── ui-deployment.yml
 │   └── ingress.yml
 ├── docker/
-│   ├── Dockerfile.csr-service
 │   ├── Dockerfile.service
 │   └── Dockerfile.ui
 ├── archive/                    # Old Podman/MicroK8s/K3s implementation
@@ -178,7 +176,7 @@ kubectl get all -n gym-jinni
 kubectl describe pod <pod-name> -n gym-jinni
 
 # View logs
-kubectl logs -f deployment/csr-service -n gym-jinni
+kubectl logs -f deployment/main-service -n gym-jinni
 kubectl logs -f deployment/main-service -n gym-jinni
 kubectl logs -f deployment/ui -n gym-jinni
 
@@ -186,7 +184,7 @@ kubectl logs -f deployment/ui -n gym-jinni
 kubectl exec -it <pod-name> -n gym-jinni -- /bin/sh
 
 # Scale deployments
-kubectl scale deployment csr-service --replicas=3 -n gym-jinni
+kubectl scale deployment main-service --replicas=3 -n gym-jinni
 ```
 
 ### k3d Cluster Management
@@ -276,7 +274,7 @@ k3d cluster delete gym-jinni
 docker images | grep gym-jinni
 
 # Import images to k3d cluster
-k3d image import gym-jinni/csr-service:latest -c gym-jinni
+k3d image import gym-jinni/service:latest -c gym-jinni
 k3d image import gym-jinni/service:latest -c gym-jinni
 k3d image import gym-jinni/ui:latest -c gym-jinni
 
@@ -345,7 +343,7 @@ resources:
 ### Scale replicas
 
 ```bash
-kubectl scale deployment csr-service --replicas=5 -n gym-jinni
+kubectl scale deployment main-service --replicas=5 -n gym-jinni
 ```
 
 ### Persistent storage
@@ -365,10 +363,10 @@ volumeClaimTemplates:
 
 ## Development Workflow
 
-1. Make code changes in `service/` or `csr_service/`
+1. Make code changes in `service/`
 2. Rebuild images: `ansible-playbook playbooks/deploy-services.yml --tags build`
-3. Redeploy: `kubectl rollout restart deployment/csr-service -n gym-jinni`
-4. View logs: `kubectl logs -f deployment/csr-service -n gym-jinni`
+3. Redeploy: `kubectl rollout restart deployment/main-service -n gym-jinni`
+4. View logs: `kubectl logs -f deployment/main-service -n gym-jinni`
 
 ## Security Notes
 

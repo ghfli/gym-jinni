@@ -26,11 +26,11 @@ spec:
             name: main-service
             port:
               number: 8081
-      - path: /rbac/v1
+      - path: /rbac
         pathType: Prefix
         backend:
           service:
-            name: csr-service
+            name: main-service
             port:
-              number: 8083
+              number: 8081
 

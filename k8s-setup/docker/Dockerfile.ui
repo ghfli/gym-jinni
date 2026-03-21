@@ -55,7 +55,7 @@ RUN echo 'server { \
         proxy_set_header X-Real-IP $remote_addr; \
     } \
     location /rbac/ { \
-        proxy_pass http://csr-service:8083/; \
+        proxy_pass http://main-service:8081/; \
         proxy_set_header Host $host; \
         proxy_set_header X-Real-IP $remote_addr; \
     } \

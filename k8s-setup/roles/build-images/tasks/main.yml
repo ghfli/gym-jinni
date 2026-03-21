@@ -5,15 +5,6 @@
     state: directory
     mode: '0755'
 
-- name: Build CSR service Docker image
-  shell: |
-    cd {{ playbook_dir }}/../../
-    sudo docker build -f k8s-setup/docker/Dockerfile.csr-service -t gym-jinni/csr-service:latest .
-  args:
-    chdir: "{{ playbook_dir }}/../../"
-  register: build_csr
-  changed_when: "'Successfully tagged' in build_csr.stdout or 'Successfully built' in build_csr.stdout"
-
 - name: Build main service Docker image
   shell: |
     cd {{ playbook_dir }}/../../
@@ -35,7 +26,6 @@
 - name: Import images into k3d cluster
   shell: sudo k3d image import {{ item }} -c gym-jinni
   loop:
-    - gym-jinni/csr-service:latest
     - gym-jinni/service:latest
     - gym-jinni/ui:latest
   register: import_result

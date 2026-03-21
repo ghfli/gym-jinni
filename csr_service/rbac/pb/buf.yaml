@@ -1,6 +1,0 @@
-version: v1
-name: buf.build/ghfli/gym-jinni-rbac
-deps:
-  - buf.build/googleapis/googleapis
-  - buf.build/ghfli/gym-jinni-validator
-

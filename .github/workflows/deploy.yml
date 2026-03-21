@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        service: [csr-service, service, ui]
+        service: [service, ui]
     
     steps:
     - name: Checkout code
@@ -80,7 +80,6 @@ jobs:
         kubectl apply -f k8s-setup/manifests/secrets.yml
         kubectl apply -f k8s-setup/manifests/configmaps.yml
         kubectl apply -f k8s-setup/manifests/postgres-statefulset.yml
-        kubectl apply -f k8s-setup/manifests/csr-service-deployment.yml
         kubectl apply -f k8s-setup/manifests/main-service-deployment.yml
         kubectl apply -f k8s-setup/manifests/ui-deployment.yml
         kubectl apply -f k8s-setup/manifests/ingress.yml
@@ -88,7 +87,6 @@ jobs:
     - name: Wait for deployments
       run: |
         kubectl wait --for=condition=ready pod -l app=postgres -n gym-jinni --timeout=300s
-        kubectl wait --for=condition=ready pod -l app=csr-service -n gym-jinni --timeout=300s
         kubectl wait --for=condition=ready pod -l app=main-service -n gym-jinni --timeout=300s
         kubectl wait --for=condition=ready pod -l app=ui -n gym-jinni --timeout=300s
 
@@ -97,4 +95,3 @@ jobs:
         kubectl get pods -n gym-jinni
         kubectl get svc -n gym-jinni
         kubectl get ingress -n gym-jinni
-

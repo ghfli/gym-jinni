@@ -1,49 +1,37 @@
-# Multi-stage build for Main Service
-FROM golang:1.18-alpine AS builder
+# Multi-stage build: generate protobuf + sqlc, then compile
+FROM golang:1.21-bookworm AS builder
 
-# Install build dependencies
-RUN apk add --no-cache git make protobuf protobuf-dev
+RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates \
+  && curl -sSL "https://github.com/bufbuild/buf/releases/download/v1.28.1/buf-Linux-x86_64.tar.gz" | tar -xz -C /usr/local --strip-components=1 \
+  && rm -rf /var/lib/apt/lists/*
 
-# Set working directory
+ENV PATH="/go/bin:/usr/local/bin:${PATH}"
+
+RUN go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.28.0 && \
+    go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.2.0 && \
+    go install github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-grpc-gateway@v2.10.3 && \
+    go install github.com/mwitkow/go-proto-validators/protoc-gen-govalidators@v0.3.2 && \
+    go install github.com/sqlc-dev/sqlc/cmd/sqlc@v1.24.0
+
 WORKDIR /build
-
-# Copy go mod files
 COPY service/go.mod service/go.sum ./service/
 WORKDIR /build/service
 RUN go mod download
 
-# Copy source code
-WORKDIR /build
-COPY service/ ./service/
+COPY service/ ./
 
-# Build the service
 WORKDIR /build/service
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o service .
+RUN for d in user/pb class/pb rbac/pb validator/pb; do (cd "$$d" && buf mod update); done
+RUN buf generate
+RUN for s in user class rbac; do (cd $$s/db && sqlc generate); done
 
-# Final stage
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o /out/service .
+
 FROM alpine:3.18
-
-# Install runtime dependencies
 RUN apk add --no-cache ca-certificates bash curl
-
-# Create app directory
 WORKDIR /app/service
-
-# Copy binary from builder
-COPY --from=builder /build/service/service /app/service/service
-
-# Copy migrations
+COPY --from=builder /out/service /app/service/service
 COPY service/mig/ /app/service/mig/
-
-# Copy generated files if they exist
-COPY service/gen/ /app/service/gen/ 2>/dev/null || true
-
-# Expose ports
 EXPOSE 8080 8081
-
-# Set environment variables
 ENV DBURL="postgresql://root:gj@postgres:5432/gj?sslmode=disable&search_path=public"
-
-# Run the service
 CMD ["/app/service/service"]
-

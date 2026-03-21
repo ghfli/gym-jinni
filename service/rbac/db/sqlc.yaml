@@ -1,0 +1,10 @@
+version: 2
+sql:
+  - schema: "../../schema/rbac.sql"
+    queries: "rbac.sqlc.sql"
+    engine: "postgresql"
+    gen:
+      go:
+        package: "rbacv1alpha"
+        out: "../../gen/go/rbac/v1alpha"
+        sql_package: "database/sql"

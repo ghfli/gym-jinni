@@ -9,7 +9,7 @@ require (
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.10.3
 	github.com/jackc/pgx/v4 v4.16.1
 	github.com/mwitkow/go-proto-validators v0.3.2
-	github.com/tabbed/pqtype v0.1.1
+	github.com/sqlc-dev/pqtype v0.3.0
 	google.golang.org/genproto v0.0.0-20220630174209-ad1d48641aa7
 	google.golang.org/grpc v1.47.0
 	google.golang.org/protobuf v1.28.0

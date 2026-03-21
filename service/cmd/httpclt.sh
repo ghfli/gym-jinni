@@ -1,6 +1,10 @@
 #!/bin/sh
+set -e
+BASE="${HTTP_BASE:-http://127.0.0.1:8081}"
 
-curl -d '{"user": {"email": "a@b.com", "phone": "1234567890",
+curl -sS -d '{"user": {"email": "a@b.com", "phone": "1234567890",
             "name": "abc", "passwd": "abc" }}' \
-    http://127.0.0.1:8081/v1/create_user
+    "$BASE/v1/create_user"
+echo
+curl -sS "$BASE/v1/roles"
 echo

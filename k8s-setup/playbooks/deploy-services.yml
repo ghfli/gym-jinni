@@ -28,7 +28,6 @@
         export KUBECONFIG=$HOME/.kube/gym-jinni-config
         kubectl wait --for=condition=ready pod -l app={{ item }} -n gym-jinni --timeout=300s
       loop:
-        - csr-service
         - main-service
         - ui
       tags: ['verify']

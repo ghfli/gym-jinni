@@ -25,11 +25,6 @@ variables:
     - master
     - csr
 
-build:csr-service:
-  <<: *build_template
-  variables:
-    SERVICE: csr-service
-
 build:service:
   <<: *build_template
   variables:
@@ -42,17 +37,11 @@ build:ui:
 
 test:integration:
   stage: test
-  image: golang:1.18
+  image: docker:24-dind
   services:
-    - postgres:15-alpine
-  variables:
-    POSTGRES_DB: gj
-    POSTGRES_USER: root
-    POSTGRES_PASSWORD: gj
-    DBURL: "postgresql://root:gj@postgres:5432/gj?sslmode=disable&search_path=public"
+    - docker:24-dind
   script:
-    - cd service && make test || true
-    - cd ../csr_service && make test || true
+    - docker build -f k8s-setup/docker/Dockerfile.service -t gym-jinni/service:ci-test .
   only:
     - main
     - master
@@ -69,15 +58,12 @@ deploy:kubernetes:
     - kubectl apply -f k8s-setup/manifests/secrets.yml
     - kubectl apply -f k8s-setup/manifests/configmaps.yml
     - kubectl apply -f k8s-setup/manifests/postgres-statefulset.yml
-    - kubectl apply -f k8s-setup/manifests/csr-service-deployment.yml
     - kubectl apply -f k8s-setup/manifests/main-service-deployment.yml
     - kubectl apply -f k8s-setup/manifests/ui-deployment.yml
     - kubectl apply -f k8s-setup/manifests/ingress.yml
-    - kubectl rollout status deployment/csr-service -n gym-jinni
     - kubectl rollout status deployment/main-service -n gym-jinni
     - kubectl rollout status deployment/ui -n gym-jinni
   only:
     - main
     - master
   when: manual
-

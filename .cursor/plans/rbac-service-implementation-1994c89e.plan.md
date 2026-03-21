@@ -1,4 +1,46 @@
-<!-- 1994c89e-38c4-4f60-8a1b-9fb841f0d73a 86cf26ad-9c4d-4af7-8352-06a718dc655c -->
+---
+name: Role-Based Access Control Service Implementation
+overview: ""
+todos:
+  - id: bccc17f3-8c97-498f-909e-3345cdbc6337
+    content: Create csr_service directory structure and initialize Go module
+    status: pending
+  - id: f7ffb1d3-505d-4fb0-af40-023d7b0e5b75
+    content: Create DBML schema for roles, permissions, role_permission, and user_role tables
+    status: pending
+  - id: ebf0b250-6ce1-483e-a8da-0926c3e0e172
+    content: Write SQLC queries for all CRUD operations and authorization checks
+    status: pending
+  - id: 74276b53-dd4f-4c7a-a3e2-89439dfd2771
+    content: Create migration files for schema creation and seed data
+    status: pending
+  - id: 269dedf1-8425-4233-ac12-53f0d191af86
+    content: Define protobuf messages and RBACService with all required RPCs
+    status: pending
+  - id: 33f590fa-5545-48f0-851b-1c726e70b497
+    content: Create buf.yaml, buf.work.yaml, and buf.gen.yaml for code generation
+    status: pending
+  - id: d6f8152a-4ca3-4b7e-89af-8b1a5f0aee86
+    content: Implement ImRBACServiceServer with all RPC handlers and business logic
+    status: pending
+  - id: 4e2fadd4-6688-4041-8500-9d6bd055580a
+    content: Implement gRPC authorization interceptor and permission mapping
+    status: pending
+  - id: 54e4d58e-4f19-484d-8995-15b6971fc62f
+    content: Create Makefile with targets for building, code generation, and migrations
+    status: pending
+  - id: aef5c897-7105-476d-96cf-83e0cba15b33
+    content: Create service.go main entry point with gRPC and HTTP gateway servers
+    status: pending
+  - id: ad7adb59-a17e-4d7b-a3c8-c62bff2c367d
+    content: Create gRPC and HTTP test clients to validate all functionality
+    status: pending
+  - id: bd52f8f8-e459-4d7c-9878-e21faf7a1351
+    content: Add README with setup instructions and integration guide
+    status: pending
+isProject: false
+---
+
 # Role-Based Access Control Service Implementation
 
 ## Overview
@@ -208,18 +250,3 @@ The csr_service can be:
 3. Used by other services via gRPC calls to check permissions
 
 Future integration would update `service/service.go` to import and use the authorization middleware from csr_service.
-
-### To-dos
-
-- [ ] Create csr_service directory structure and initialize Go module
-- [ ] Create DBML schema for roles, permissions, role_permission, and user_role tables
-- [ ] Write SQLC queries for all CRUD operations and authorization checks
-- [ ] Create migration files for schema creation and seed data
-- [ ] Define protobuf messages and RBACService with all required RPCs
-- [ ] Create buf.yaml, buf.work.yaml, and buf.gen.yaml for code generation
-- [ ] Implement ImRBACServiceServer with all RPC handlers and business logic
-- [ ] Implement gRPC authorization interceptor and permission mapping
-- [ ] Create Makefile with targets for building, code generation, and migrations
-- [ ] Create service.go main entry point with gRPC and HTTP gateway servers
-- [ ] Create gRPC and HTTP test clients to validate all functionality
-- [ ] Add README with setup instructions and integration guide

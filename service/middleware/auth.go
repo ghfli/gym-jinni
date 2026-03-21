@@ -3,7 +3,7 @@ package middleware
 import (
 	"context"
 	"fmt"
-	rbacv1alpha "github.com/ghfli/gym-jinni/csr_service/gen/go/rbac/v1alpha"
+	rbacv1alpha "github.com/ghfli/gym-jinni/service/gen/go/rbac/v1alpha"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"

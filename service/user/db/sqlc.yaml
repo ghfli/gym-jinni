@@ -1,13 +1,10 @@
 version: 2
 sql:
-  - schema: "../../gen/sql/user.dbml.sql"
+  - schema: "../../schema/user.sql"
     queries: "user.sqlc.sql"
     engine: "postgresql"
     gen:
       go:
         package: "userv1alpha"
         out: "../../gen/go/user/v1alpha"
-        output_db_file_name: "user.sqlc.db.go"
-        output_models_file_name: "user.sqlc.model.go"
-        output_querier_file_name: "user.sqlc.sql.go"
-
+        sql_package: "database/sql"

@@ -101,7 +101,6 @@ if [ "$FORCE" = false ]; then
     read -p "Do you want to remove built Docker images? (yes/no): " -r
     echo ""
     if [[ $REPLY =~ ^[Yy][Ee][Ss]$ ]]; then
-        docker rmi gym-jinni/csr-service:latest 2>/dev/null || true
         docker rmi gym-jinni/service:latest 2>/dev/null || true
         docker rmi gym-jinni/ui:latest 2>/dev/null || true
         echo -e "${GREEN}✓ Docker images removed${NC}"
@@ -109,7 +108,6 @@ if [ "$FORCE" = false ]; then
         echo -e "${YELLOW}⚠ Skipping Docker image removal${NC}"
     fi
 else
-    docker rmi gym-jinni/csr-service:latest 2>/dev/null || true
     docker rmi gym-jinni/service:latest 2>/dev/null || true
     docker rmi gym-jinni/ui:latest 2>/dev/null || true
     echo -e "${GREEN}✓ Docker images removed${NC}"

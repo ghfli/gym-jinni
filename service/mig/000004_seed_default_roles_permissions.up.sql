@@ -1,4 +1,3 @@
--- Insert default roles
 INSERT INTO rbac.role (name, description) VALUES
   ('super_admin', 'Super administrator with full system access'),
   ('gym_owner', 'Gym owner who can manage trainers, classes, and view reports'),
@@ -7,9 +6,6 @@ INSERT INTO rbac.role (name, description) VALUES
   ('guest', 'Guest with read-only access to public information')
 ON CONFLICT (name) DO NOTHING;
 
--- Insert default permissions
-
--- User Management Permissions
 INSERT INTO rbac.permission (name, resource, action, description) VALUES
   ('manage_users', 'user', 'manage', 'Full user management capabilities'),
   ('create_user', 'user', 'create', 'Create new users'),
@@ -18,7 +14,6 @@ INSERT INTO rbac.permission (name, resource, action, description) VALUES
   ('delete_user', 'user', 'delete', 'Delete users')
 ON CONFLICT (name) DO NOTHING;
 
--- Class Management Permissions
 INSERT INTO rbac.permission (name, resource, action, description) VALUES
   ('manage_classes', 'class', 'manage', 'Full class management capabilities'),
   ('create_class', 'class', 'create', 'Create new classes'),
@@ -27,7 +22,6 @@ INSERT INTO rbac.permission (name, resource, action, description) VALUES
   ('delete_class', 'class', 'delete', 'Delete classes')
 ON CONFLICT (name) DO NOTHING;
 
--- Booking Permissions
 INSERT INTO rbac.permission (name, resource, action, description) VALUES
   ('manage_bookings', 'booking', 'manage', 'Full booking management capabilities'),
   ('book_class', 'booking', 'create', 'Book a class'),
@@ -35,14 +29,12 @@ INSERT INTO rbac.permission (name, resource, action, description) VALUES
   ('cancel_booking', 'booking', 'delete', 'Cancel a booking')
 ON CONFLICT (name) DO NOTHING;
 
--- Report Permissions
 INSERT INTO rbac.permission (name, resource, action, description) VALUES
   ('view_reports', 'report', 'read', 'View system reports'),
   ('generate_reports', 'report', 'create', 'Generate new reports'),
   ('manage_reports', 'report', 'manage', 'Full report management capabilities')
 ON CONFLICT (name) DO NOTHING;
 
--- System/RBAC Permissions
 INSERT INTO rbac.permission (name, resource, action, description) VALUES
   ('manage_roles', 'role', 'manage', 'Manage roles and role assignments'),
   ('manage_permissions', 'permission', 'manage', 'Manage permissions and permission assignments'),
@@ -50,7 +42,6 @@ INSERT INTO rbac.permission (name, resource, action, description) VALUES
   ('view_permissions', 'permission', 'read', 'View permissions')
 ON CONFLICT (name) DO NOTHING;
 
--- Assign permissions to super_admin (ALL permissions)
 INSERT INTO rbac.role_permission (role_id, permission_id)
 SELECT r.id, p.id
 FROM rbac.role r
@@ -58,7 +49,6 @@ CROSS JOIN rbac.permission p
 WHERE r.name = 'super_admin'
 ON CONFLICT (role_id, permission_id) DO NOTHING;
 
--- Assign permissions to gym_owner
 INSERT INTO rbac.role_permission (role_id, permission_id)
 SELECT r.id, p.id
 FROM rbac.role r, rbac.permission p
@@ -72,7 +62,6 @@ WHERE r.name = 'gym_owner'
   )
 ON CONFLICT (role_id, permission_id) DO NOTHING;
 
--- Assign permissions to trainer
 INSERT INTO rbac.role_permission (role_id, permission_id)
 SELECT r.id, p.id
 FROM rbac.role r, rbac.permission p
@@ -83,7 +72,6 @@ WHERE r.name = 'trainer'
   )
 ON CONFLICT (role_id, permission_id) DO NOTHING;
 
--- Assign permissions to customer
 INSERT INTO rbac.role_permission (role_id, permission_id)
 SELECT r.id, p.id
 FROM rbac.role r, rbac.permission p
@@ -93,11 +81,9 @@ WHERE r.name = 'customer'
   )
 ON CONFLICT (role_id, permission_id) DO NOTHING;
 
--- Assign permissions to guest
 INSERT INTO rbac.role_permission (role_id, permission_id)
 SELECT r.id, p.id
 FROM rbac.role r, rbac.permission p
 WHERE r.name = 'guest'
   AND p.name IN ('view_class')
 ON CONFLICT (role_id, permission_id) DO NOTHING;
-

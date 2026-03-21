@@ -8,8 +8,8 @@ data:
   POSTGRES_HOST: "postgres"
   POSTGRES_PORT: "5432"
   POSTGRES_DB: "gj"
-  CSR_SERVICE_GRPC: "csr-service:8082"
-  CSR_SERVICE_HTTP: "csr-service:8083"
+  CSR_SERVICE_GRPC: "main-service:8080"
+  CSR_SERVICE_HTTP: "main-service:8081"
   MAIN_SERVICE_GRPC: "main-service:8080"
   MAIN_SERVICE_HTTP: "main-service:8081"
 

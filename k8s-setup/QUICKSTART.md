@@ -21,12 +21,11 @@ chmod +x setup.sh
 export KUBECONFIG=$HOME/.kube/gym-jinni-config
 kubectl get pods -n gym-jinni
 
-# 5. Port forward to test
-kubectl port-forward -n gym-jinni svc/csr-service 8083:8083 &
-kubectl port-forward -n gym-jinni svc/main-service 8081:8081 &
+# 5. Port forward to test (user + RBAC share main-service HTTP)
+kubectl port-forward -n gym-jinni svc/main-service 8080:8080 8081:8081 &
 
 # 6. Test endpoints
-curl http://localhost:8083/v1/roles
+curl http://localhost:8081/v1/roles
 curl http://localhost:8081/v1/users
 ```
 
@@ -49,8 +48,7 @@ sudo usermod -aG docker $USER
 
 - **k3d cluster** with 1 server + 2 agent nodes
 - **PostgreSQL** database with persistent storage (5Gi)
-- **CSR Service** (RBAC) - 2 replicas
-- **Main Service** (User/Class) - 2 replicas
+- **Main Service** (User, Class, RBAC) - 2 replicas
 - **UI** (Flutter web) - 2 replicas
 - **Traefik ingress** controller (included with k3d)
 
@@ -58,8 +56,7 @@ sudo usermod -aG docker $USER
 
 | Service | gRPC | HTTP | Description |
 |---------|------|------|-------------|
-| CSR Service | 8082 | 8083 | Role-based access control |
-| Main Service | 8080 | 8081 | User and class management |
+| Main Service | 8080 | 8081 | Users, classes, RBAC (same process) |
 | UI | - | 3000 | Flutter web interface |
 | PostgreSQL | 5432 | - | Database |
 | K8s API | 6443 | - | Kubernetes API server |
@@ -78,13 +75,13 @@ k3d cluster list
 k3d node list
 
 # View logs
-kubectl logs -f deployment/csr-service -n gym-jinni
+kubectl logs -f deployment/main-service -n gym-jinni
 
 # Scale a service
-kubectl scale deployment csr-service --replicas=3 -n gym-jinni
+kubectl scale deployment main-service --replicas=3 -n gym-jinni
 
 # Restart a service
-kubectl rollout restart deployment/csr-service -n gym-jinni
+kubectl rollout restart deployment/main-service -n gym-jinni
 
 # Access a k3d node (if needed)
 docker exec -it k3d-gym-jinni-server-0 sh
@@ -132,7 +129,7 @@ kubectl logs <pod-name> -n gym-jinni
 docker images | grep gym-jinni
 
 # Import images to k3d if needed
-k3d image import gym-jinni/csr-service:latest -c gym-jinni
+k3d image import gym-jinni/service:latest -c gym-jinni
 ```
 
 ### Can't connect to services
@@ -144,7 +141,7 @@ kubectl get svc -n gym-jinni
 kubectl get endpoints -n gym-jinni
 
 # Port forward manually
-kubectl port-forward -n gym-jinni svc/csr-service 8083:8083
+kubectl port-forward -n gym-jinni svc/main-service 8081:8081
 ```
 
 ### Port already in use

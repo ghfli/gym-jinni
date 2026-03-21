@@ -46,13 +46,6 @@
   register: pg_wait
   until: pg_wait.rc == 0
 
-- name: Apply CSR service deployment
-  shell: |
-    export KUBECONFIG={{ kubeconfig_path }}
-    kubectl apply -f {{ playbook_dir }}/../manifests/csr-service-deployment.yml
-  register: csr_result
-  changed_when: "'created' in csr_result.stdout or 'configured' in csr_result.stdout"
-
 - name: Apply main service deployment
   shell: |
     export KUBECONFIG={{ kubeconfig_path }}

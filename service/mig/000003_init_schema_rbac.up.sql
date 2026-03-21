@@ -39,11 +39,9 @@ ALTER TABLE "rbac"."role_permission" ADD FOREIGN KEY ("role_id") REFERENCES "rba
 ALTER TABLE "rbac"."role_permission" ADD FOREIGN KEY ("permission_id") REFERENCES "rbac"."permission" ("id") ON DELETE CASCADE;
 ALTER TABLE "rbac"."user_role" ADD FOREIGN KEY ("role_id") REFERENCES "rbac"."role" ("id") ON DELETE CASCADE;
 
--- Create indexes for better query performance
 CREATE INDEX IF NOT EXISTS idx_user_role_user_id ON "rbac"."user_role" ("user_id");
 CREATE INDEX IF NOT EXISTS idx_user_role_role_id ON "rbac"."user_role" ("role_id");
 CREATE INDEX IF NOT EXISTS idx_user_role_expires_at ON "rbac"."user_role" ("expires_at");
 CREATE INDEX IF NOT EXISTS idx_role_permission_role_id ON "rbac"."role_permission" ("role_id");
 CREATE INDEX IF NOT EXISTS idx_role_permission_permission_id ON "rbac"."role_permission" ("permission_id");
 CREATE INDEX IF NOT EXISTS idx_permission_resource_action ON "rbac"."permission" ("resource", "action");
-

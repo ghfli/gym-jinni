@@ -34,8 +34,7 @@ All manifests are in `manifests/` directory:
 - `secrets.yml` - PostgreSQL credentials
 - `configmaps.yml` - Database URLs and service endpoints
 - `postgres-statefulset.yml` - PostgreSQL with persistent storage (5Gi)
-- `csr-service-deployment.yml` - CSR service (2 replicas, ports 8082/8083)
-- `main-service-deployment.yml` - Main service (2 replicas, ports 8080/8081)
+- `main-service-deployment.yml` - Main service: user, class, RBAC (2 replicas, ports 8080/8081)
 - `ui-deployment.yml` - Flutter UI (2 replicas, port 80)
 - `ingress.yml` - Ingress controller with routing rules
 
@@ -43,8 +42,7 @@ All manifests are in `manifests/` directory:
 
 Multi-stage Dockerfiles in `docker/` directory:
 
-- `Dockerfile.csr-service` - Go 1.18 builder + Alpine runtime
-- `Dockerfile.service` - Go 1.18 builder + Alpine runtime
+- `Dockerfile.service` - buf + sqlc codegen + Go build (Debian builder, Alpine runtime)
 - `Dockerfile.ui` - Flutter builder + Nginx runtime
 
 **Features:**
@@ -58,7 +56,7 @@ Multi-stage Dockerfiles in `docker/` directory:
 **GitHub Actions (`.github/workflows/deploy.yml`):**
 - Build and push images to GitHub Container Registry
 - Deploy to Kubernetes on push to main/master
-- Matrix build for all 3 services
+- Matrix build for `service` and `ui` images
 - Automated deployment verification
 
 **GitLab CI (`.gitlab-ci.yml`):**
@@ -111,8 +109,6 @@ Host Machine
     └── Port Mappings (via LoadBalancer)
         ├── 8080:30080 (Main Service gRPC)
         ├── 8081:30081 (Main Service HTTP)
-        ├── 8082:30082 (CSR Service gRPC)
-        ├── 8083:30083 (CSR Service HTTP)
         ├── 3000:30000 (UI)
         └── 6443:6443 (K8s API)
 ```
@@ -124,19 +120,12 @@ gym-jinni namespace
     ├── PostgreSQL StatefulSet (1 replica)
     │   └── PVC: postgres-storage (5Gi, local-path)
     │
-    ├── CSR Service Deployment (2 replicas)
-    │   ├── Init: wait-for-postgres
-    │   ├── Init: run-migrations
-    │   └── Container: csr-service
-    │       ├── Port 8082 (gRPC)
-    │       └── Port 8083 (HTTP)
-    │
     ├── Main Service Deployment (2 replicas)
     │   ├── Init: wait-for-postgres
     │   ├── Init: run-migrations
     │   └── Container: main-service
-    │       ├── Port 8080 (gRPC)
-    │       └── Port 8081 (HTTP)
+    │       ├── Port 8080 (gRPC: user + RBAC)
+    │       └── Port 8081 (HTTP gateway)
     │
     └── UI Deployment (2 replicas)
         └── Container: ui (Nginx)
@@ -207,14 +196,14 @@ k3d cluster list
 kubectl get pods -n gym-jinni
 
 # 4. Test services
-kubectl port-forward -n gym-jinni svc/csr-service 8083:8083
+kubectl port-forward -n gym-jinni svc/main-service 8081:8081
 curl http://localhost:8083/v1/roles
 
 kubectl port-forward -n gym-jinni svc/main-service 8081:8081
 curl http://localhost:8081/v1/users
 
 # 5. Check logs
-kubectl logs -f deployment/csr-service -n gym-jinni
+kubectl logs -f deployment/main-service -n gym-jinni
 
 # 6. Teardown
 ./teardown.sh
@@ -333,7 +322,7 @@ sudo ss -tulpn | grep -E ':(8080|8081|8082|8083|3000|6443)'
 # Solution: Check images
 docker images | grep gym-jinni
 # Import images if needed
-k3d image import gym-jinni/csr-service:latest -c gym-jinni
+k3d image import gym-jinni/service:latest -c gym-jinni
 ```
 
 **Issue**: Database connection fails
@@ -381,7 +370,7 @@ export KUBECONFIG=$HOME/.kube/gym-jinni-config
 ansible-playbook playbooks/deploy-services.yml --tags build
 
 # Restart services
-kubectl rollout restart deployment/csr-service -n gym-jinni
+kubectl rollout restart deployment/main-service -n gym-jinni
 
 # Check cluster health
 kubectl get nodes
