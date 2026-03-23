@@ -1,8 +1,8 @@
 # Multi-stage build: generate protobuf + sqlc, then compile
-FROM golang:1.21-bookworm AS builder
+FROM docker.io/library/golang:1.25.8-bookworm AS builder
 
 RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates \
-  && curl -sSL "https://github.com/bufbuild/buf/releases/download/v1.28.1/buf-Linux-x86_64.tar.gz" | tar -xz -C /usr/local --strip-components=1 \
+  && curl -sSL "https://github.com/bufbuild/buf/releases/download/v1.66.1/buf-Linux-x86_64.tar.gz" | tar -xz -C /usr/local --strip-components=1 \
   && rm -rf /var/lib/apt/lists/*
 
 ENV PATH="/go/bin:/usr/local/bin:${PATH}"
@@ -21,13 +21,15 @@ RUN go mod download
 COPY service/ ./
 
 WORKDIR /build/service
-RUN for d in user/pb class/pb rbac/pb validator/pb; do (cd "$$d" && buf mod update); done
+RUN buf dep update
 RUN buf generate
-RUN for s in user class rbac; do (cd $$s/db && sqlc generate); done
+RUN (cd user/db && sqlc generate) && \
+    (cd class/db && sqlc generate) && \
+    (cd rbac/db && sqlc generate)
 
 RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o /out/service .
 
-FROM alpine:3.18
+FROM docker.io/library/alpine:3.23
 RUN apk add --no-cache ca-certificates bash curl
 WORKDIR /app/service
 COPY --from=builder /out/service /app/service/service

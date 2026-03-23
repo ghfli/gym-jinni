@@ -1,6 +1,9 @@
 #!/bin/bash
 set -e
 
+# k3d uses the Docker API; with Podman this must point at the rootful API socket.
+export DOCKER_HOST="${DOCKER_HOST:-unix:///run/podman/podman.sock}"
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -44,7 +47,7 @@ if [ "$FORCE" = false ]; then
     echo "  - Delete all Kubernetes resources in gym-jinni namespace"
     echo "  - Delete the k3d cluster"
     echo "  - Remove kubeconfig file"
-    echo "  - Optionally remove Docker images"
+    echo "  - Optionally remove local container images (podman)"
     echo ""
     read -p "Are you sure you want to continue? (yes/no): " -r
     echo ""
@@ -73,8 +76,8 @@ echo ""
 echo -e "${YELLOW}Step 2: Deleting k3d cluster...${NC}"
 
 if command -v k3d >/dev/null 2>&1; then
-    if k3d cluster list | grep -q "gym-jinni"; then
-        k3d cluster delete gym-jinni 2>/dev/null || true
+    if sudo -E k3d cluster list 2>/dev/null | grep -q "gym-jinni"; then
+        sudo -E k3d cluster delete gym-jinni 2>/dev/null || true
         echo -e "${GREEN}✓ k3d cluster deleted${NC}"
     else
         echo -e "${YELLOW}⚠ k3d cluster not found${NC}"
@@ -95,28 +98,28 @@ else
 fi
 echo ""
 
-# Step 4: Clean up Docker images (optional)
-echo -e "${YELLOW}Step 4: Cleaning up Docker images...${NC}"
+# Step 4: Clean up local container images (optional)
+echo -e "${YELLOW}Step 4: Cleaning up container images...${NC}"
 if [ "$FORCE" = false ]; then
-    read -p "Do you want to remove built Docker images? (yes/no): " -r
+    read -p "Do you want to remove built container images (podman)? (yes/no): " -r
     echo ""
     if [[ $REPLY =~ ^[Yy][Ee][Ss]$ ]]; then
-        docker rmi gym-jinni/service:latest 2>/dev/null || true
-        docker rmi gym-jinni/ui:latest 2>/dev/null || true
-        echo -e "${GREEN}✓ Docker images removed${NC}"
+        sudo podman rmi gym-jinni/service:latest 2>/dev/null || true
+        sudo podman rmi gym-jinni/ui:latest 2>/dev/null || true
+        echo -e "${GREEN}✓ Container images removed${NC}"
     else
-        echo -e "${YELLOW}⚠ Skipping Docker image removal${NC}"
+        echo -e "${YELLOW}⚠ Skipping container image removal${NC}"
     fi
 else
-    docker rmi gym-jinni/service:latest 2>/dev/null || true
-    docker rmi gym-jinni/ui:latest 2>/dev/null || true
-    echo -e "${GREEN}✓ Docker images removed${NC}"
+    sudo podman rmi gym-jinni/service:latest 2>/dev/null || true
+    sudo podman rmi gym-jinni/ui:latest 2>/dev/null || true
+    echo -e "${GREEN}✓ Container images removed${NC}"
 fi
 echo ""
 
 # Final cleanup
 echo -e "${YELLOW}Performing final cleanup...${NC}"
-docker system prune -f 2>/dev/null || true
+sudo podman system prune -f 2>/dev/null || true
 
 echo ""
 echo -e "${GREEN}========================================${NC}"

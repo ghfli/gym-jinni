@@ -1,5 +1,5 @@
 # Multi-stage build for Flutter UI
-FROM ubuntu:22.04 AS builder
+FROM docker.io/library/ubuntu:24.04 AS builder
 
 # Install dependencies
 RUN apt-get update && apt-get install -y \
@@ -35,7 +35,7 @@ COPY ui/ ./
 RUN flutter build web --release
 
 # Final stage - nginx to serve the app
-FROM nginx:alpine
+FROM docker.io/library/nginx:stable-alpine
 
 # Copy built web app
 COPY --from=builder /app/build/web /usr/share/nginx/html
@@ -66,4 +66,3 @@ EXPOSE 80
 
 # Start nginx
 CMD ["nginx", "-g", "daemon off;"]
-

@@ -4,8 +4,8 @@ This directory contains the complete setup for a Kubernetes cluster using k3d, o
 
 ## Architecture
 
-- **k3d cluster** (K3s in Docker) with 1 server + 2 agent nodes
-  - Lightweight Kubernetes distribution designed for containers
+- **k3d cluster** (K3s in Linux containers via Podman) with 1 server + 2 agent nodes
+  - Lightweight Kubernetes distribution; k3d drives the engine through the Docker-compatible API (`DOCKER_HOST`)
   - Handles all cgroup and AppArmor complexities automatically
   - Fast setup and teardown
 - **Services deployed**:
@@ -23,18 +23,20 @@ Install the following on your host machine:
 ```bash
 # Ubuntu/Debian
 sudo apt-get update
-sudo apt-get install -y ansible python3-pip docker.io kubectl
+sudo apt-get install -y ansible python3-pip podman kubectl
+sudo systemctl enable --now podman.socket
 
 # Arch Linux
-sudo pacman -S ansible python docker kubectl
+sudo pacman -S ansible podman kubectl
+sudo systemctl enable --now podman.socket
 
-# macOS
-brew install ansible docker kubectl
-
-# k3d will be automatically installed by the setup script
+# macOS (Homebrew; enable the Podman machine / socket per Podman docs)
+brew install ansible podman kubectl
 ```
 
-**Note:** k3d works with both Docker and Podman. If using Podman, ensure it's configured with Docker compatibility.
+**Podman socket:** Ansible and k3d expect the **rootful** API socket at `unix:///run/podman/podman.sock` (the default after `systemctl enable --now podman.socket` on Linux). Override `k3d_docker_host` / `k3d_podman_socket_path` in `group_vars/all.yml` if you use a different layout.
+
+**Note:** k3d is invoked with `sudo -E` so `DOCKER_HOST` from Ansible reaches the same engine `podman build` uses under `sudo`.
 
 ## Quick Start
 
@@ -50,7 +52,7 @@ This will:
 1. Install k3d (if not already installed)
 2. Create a k3d cluster with 1 server + 2 agents
 3. Configure kubectl access
-4. Build Docker images for all services
+4. Build container images for all services (Podman)
 5. Deploy all services to Kubernetes
 
 ### 2. Access the cluster
@@ -142,7 +144,7 @@ k8s-setup/
 │   └── deploy-services.yml     # Build + deploy services
 ├── roles/
 │   ├── k3d/                    # Install k3d and create cluster
-│   ├── build-images/           # Build Docker images
+│   ├── build-images/           # Build container images (Podman)
 │   └── gym-jinni/              # Deploy to K8s
 ├── manifests/
 │   ├── namespace.yml
@@ -152,9 +154,11 @@ k8s-setup/
 │   ├── main-service-deployment.yml
 │   ├── ui-deployment.yml
 │   └── ingress.yml
-├── docker/
+├── container/
 │   ├── Dockerfile.service
 │   └── Dockerfile.ui
+├── group_vars/
+│   └── all.yml                 # k3d DOCKER_HOST / Podman socket paths
 ├── archive/                    # Old Podman/MicroK8s/K3s implementation
 ├── setup.sh                    # One-command setup
 ├── teardown.sh                 # One-command cleanup
@@ -197,7 +201,7 @@ k3d cluster list
 k3d node list
 
 # Access k3d node shell (if needed)
-docker exec -it k3d-gym-jinni-server-0 sh
+podman exec -it k3d-gym-jinni-server-0 sh
 
 # Stop cluster (preserves state)
 k3d cluster stop gym-jinni
@@ -231,7 +235,7 @@ kubectl top pods -n gym-jinni
 ### GitHub Actions
 
 The `.github/workflows/deploy.yml` pipeline:
-1. Builds Docker images for all services
+1. Builds container images with Podman for all services
 2. Pushes to GitHub Container Registry
 3. Deploys to Kubernetes cluster (on push to main/master)
 
@@ -242,7 +246,7 @@ The `.github/workflows/deploy.yml` pipeline:
 ### GitLab CI
 
 The `.gitlab-ci.yml` pipeline:
-1. Builds Docker images
+1. Builds container images with Podman
 2. Runs integration tests
 3. Deploys to Kubernetes (manual trigger)
 
@@ -256,8 +260,9 @@ The `.gitlab-ci.yml` pipeline:
 ### k3d cluster won't start
 
 ```bash
-# Check Docker is running
-docker ps
+# Check Podman API socket and engine
+ls -l /run/podman/podman.sock
+sudo podman ps
 
 # Check k3d version
 k3d version
@@ -271,12 +276,12 @@ k3d cluster delete gym-jinni
 
 ```bash
 # Check if images are available
-docker images | grep gym-jinni
+sudo podman images | grep gym-jinni
 
-# Import images to k3d cluster
-k3d image import gym-jinni/service:latest -c gym-jinni
-k3d image import gym-jinni/service:latest -c gym-jinni
-k3d image import gym-jinni/ui:latest -c gym-jinni
+# Import images to k3d cluster (same DOCKER_HOST as Ansible)
+export DOCKER_HOST=unix:///run/podman/podman.sock
+sudo -E k3d image import gym-jinni/service:latest -c gym-jinni
+sudo -E k3d image import gym-jinni/ui:latest -c gym-jinni
 
 # Check pod events
 kubectl describe pod <pod-name> -n gym-jinni

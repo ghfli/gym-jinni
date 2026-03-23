@@ -17,6 +17,13 @@ echo -e "${YELLOW}Checking prerequisites...${NC}"
 
 command -v ansible-playbook >/dev/null 2>&1 || { echo -e "${RED}Error: ansible is not installed${NC}" >&2; exit 1; }
 command -v kubectl >/dev/null 2>&1 || { echo -e "${RED}Error: kubectl is not installed${NC}" >&2; exit 1; }
+command -v podman >/dev/null 2>&1 || { echo -e "${RED}Error: podman is not installed${NC}" >&2; exit 1; }
+
+if [ ! -S /run/podman/podman.sock ]; then
+    echo -e "${RED}Error: Podman API socket not found at /run/podman/podman.sock${NC}" >&2
+    echo "Enable it with: sudo systemctl enable --now podman.socket" >&2
+    exit 1
+fi
 
 echo -e "${GREEN}✓ Prerequisites check passed${NC}"
 echo ""
@@ -43,7 +50,7 @@ while [[ $# -gt 0 ]]; do
             echo "Usage: $0 [OPTIONS]"
             echo ""
             echo "Options:"
-            echo "  --skip-build    Skip building Docker images"
+            echo "  --skip-build    Skip building container images"
             echo "  --skip-deploy   Skip deploying services"
             echo "  --help          Show this help message"
             exit 0
@@ -81,7 +88,7 @@ sleep 10
 
 # Step 3: Build and deploy services
 if [ "$SKIP_BUILD" = false ] && [ "$SKIP_DEPLOY" = false ]; then
-    echo -e "${YELLOW}Step 3: Building Docker images and deploying services...${NC}"
+    echo -e "${YELLOW}Step 3: Building container images and deploying services...${NC}"
     ansible-playbook playbooks/deploy-services.yml
     
     if [ $? -ne 0 ]; then
@@ -92,7 +99,7 @@ if [ "$SKIP_BUILD" = false ] && [ "$SKIP_DEPLOY" = false ]; then
     echo -e "${GREEN}✓ Services deployed${NC}"
     echo ""
 elif [ "$SKIP_BUILD" = false ]; then
-    echo -e "${YELLOW}Step 3: Building Docker images...${NC}"
+    echo -e "${YELLOW}Step 3: Building container images...${NC}"
     ansible-playbook playbooks/deploy-services.yml --tags build
     echo -e "${GREEN}✓ Images built${NC}"
     echo ""
@@ -134,7 +141,7 @@ echo "  k3d cluster list"
 echo "  k3d node list"
 echo ""
 echo "  # Access k3d nodes directly (if needed)"
-echo "  docker exec -it k3d-gym-jinni-server-0 sh"
+echo "  podman exec -it k3d-gym-jinni-server-0 sh"
 echo ""
 echo -e "${YELLOW}Service Endpoints (after port-forward):${NC}"
 echo ""

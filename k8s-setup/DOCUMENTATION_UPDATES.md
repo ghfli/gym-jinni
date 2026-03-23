@@ -134,7 +134,7 @@ All documentation in the `k8s-setup/` directory has been updated to reflect the 
 
 ### ✅ Dockerfiles (Unchanged)
 
-**Location:** `k8s-setup/docker/Dockerfile.*`
+**Location:** `k8s-setup/container/Dockerfile.*`
 
 **Reason:** Docker build process is the same, just using Docker instead of Podman.
 

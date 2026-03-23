@@ -31,4 +31,4 @@ Includes user, class, RBAC schema, and RBAC seed data.
 
 ## Docker
 
-Image build runs buf + sqlc inside the container (see `k8s-setup/docker/Dockerfile.service`).
+Image build runs buf + sqlc inside the container (see `k8s-setup/container/Dockerfile.service`).

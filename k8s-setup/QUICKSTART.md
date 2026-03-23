@@ -14,7 +14,7 @@ chmod +x setup.sh
 # The script will automatically:
 #   - Install k3d (if not present)
 #   - Create k3d cluster (1 server + 2 agents)
-#   - Build Docker images
+#   - Build container images (Podman)
 #   - Deploy all services
 
 # 4. Access services
@@ -32,14 +32,13 @@ curl http://localhost:8081/v1/users
 ## Prerequisites
 
 ```bash
-# Install Docker and Ansible
-sudo apt-get install -y docker.io ansible kubectl  # Ubuntu/Debian
-sudo pacman -S docker ansible kubectl              # Arch Linux
-brew install docker ansible kubectl                # macOS
+# Install Podman, Ansible, and kubectl
+sudo apt-get install -y podman ansible kubectl  # Ubuntu/Debian
+sudo pacman -S podman ansible kubectl           # Arch Linux
+brew install podman ansible kubectl             # macOS
 
-# Add user to docker group (Linux only)
-sudo usermod -aG docker $USER
-# Log out and back in for group changes to take effect
+# Linux: expose the rootful Podman API socket (required for k3d + Ansible)
+sudo systemctl enable --now podman.socket
 
 # k3d will be automatically installed by the setup script
 ```
@@ -70,9 +69,10 @@ kubectl get pods -n gym-jinni
 # View cluster nodes
 kubectl get nodes
 
-# View k3d cluster info
-k3d cluster list
-k3d node list
+# View k3d cluster info (use same DOCKER_HOST as setup)
+export DOCKER_HOST=unix:///run/podman/podman.sock
+sudo -E k3d cluster list
+sudo -E k3d node list
 
 # View logs
 kubectl logs -f deployment/main-service -n gym-jinni
@@ -84,13 +84,13 @@ kubectl scale deployment main-service --replicas=3 -n gym-jinni
 kubectl rollout restart deployment/main-service -n gym-jinni
 
 # Access a k3d node (if needed)
-docker exec -it k3d-gym-jinni-server-0 sh
+podman exec -it k3d-gym-jinni-server-0 sh
 
 # Stop cluster (preserves state)
-k3d cluster stop gym-jinni
+sudo -E k3d cluster stop gym-jinni
 
 # Start cluster
-k3d cluster start gym-jinni
+sudo -E k3d cluster start gym-jinni
 
 # Teardown everything
 ./teardown.sh
@@ -98,14 +98,11 @@ k3d cluster start gym-jinni
 
 ## Troubleshooting
 
-### Setup fails - Docker not running
+### Setup fails - Podman socket missing
 ```bash
-# Start Docker service
-sudo systemctl start docker
-sudo systemctl enable docker
-
-# Verify Docker is running
-docker ps
+# Enable the API socket (Linux)
+sudo systemctl enable --now podman.socket
+ls -l /run/podman/podman.sock
 ```
 
 ### Setup fails - k3d installation
@@ -126,10 +123,11 @@ kubectl describe pod <pod-name> -n gym-jinni
 kubectl logs <pod-name> -n gym-jinni
 
 # Check if images are available
-docker images | grep gym-jinni
+sudo podman images | grep gym-jinni
 
 # Import images to k3d if needed
-k3d image import gym-jinni/service:latest -c gym-jinni
+export DOCKER_HOST=unix:///run/podman/podman.sock
+sudo -E k3d image import gym-jinni/service:latest -c gym-jinni
 ```
 
 ### Can't connect to services
@@ -156,7 +154,7 @@ sudo ss -tulpn | grep :8080
 ### kubectl can't connect
 ```bash
 # Refresh kubeconfig
-k3d kubeconfig get gym-jinni > ~/.kube/gym-jinni-config
+sudo -E k3d kubeconfig get gym-jinni > ~/.kube/gym-jinni-config
 export KUBECONFIG=$HOME/.kube/gym-jinni-config
 
 # Verify connection
@@ -205,4 +203,4 @@ For issues or questions:
 - Review [SETUP_ISSUES.md](SETUP_ISSUES.md) for known issues and solutions
 - Check Kubernetes events: `kubectl get events -n gym-jinni`
 - Inspect pod logs: `kubectl logs <pod-name> -n gym-jinni`
-- View k3d logs: `k3d cluster list` and `docker logs k3d-gym-jinni-server-0`
+- View k3d logs: `sudo -E k3d cluster list` and `sudo podman logs k3d-gym-jinni-server-0`

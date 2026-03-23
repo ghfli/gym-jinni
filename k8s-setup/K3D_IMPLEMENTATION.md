@@ -2,7 +2,7 @@
 
 ## Overview
 
-Successfully migrated the Kubernetes test environment from Podman containers + MicroK8s/K3s to **k3d** (K3s in Docker). This resolves all the cgroup and AppArmor issues that were blocking the original implementation.
+Successfully migrated the Kubernetes test environment from Podman containers + MicroK8s/K3s to **k3d** (K3s in Linux containers, driven via Podman’s Docker-compatible API). This resolves all the cgroup and AppArmor issues that were blocking the original implementation.
 
 ## What Changed
 
@@ -27,7 +27,7 @@ Successfully migrated the Kubernetes test environment from Podman containers + M
 2. **`teardown.sh`**
    - Replaced Podman container cleanup with `k3d cluster delete`
    - Removed volume/network cleanup (k3d handles this)
-   - Changed from Podman to Docker for image cleanup
+   - Cleans local images with `podman` and sets `DOCKER_HOST` for k3d
 
 3. **`inventory.yml`**
    - Simplified to localhost only (k3d manages nodes internally)
@@ -57,10 +57,10 @@ Moved to `archive/` directory:
 
 These continue to work as-is:
 - `playbooks/deploy-services.yml` - Service deployment
-- `roles/build-images/` - Docker image building
+- `roles/build-images/` - Podman image build + k3d import
 - `roles/gym-jinni/` - Kubernetes manifests deployment
 - `manifests/*.yml` - All Kubernetes manifests
-- `docker/Dockerfile.*` - All Dockerfiles
+- `container/Dockerfile.*` - Service and UI image definitions
 
 ## How to Use
 
@@ -88,7 +88,7 @@ This will:
 1. Delete Kubernetes resources in gym-jinni namespace
 2. Delete the k3d cluster
 3. Clean up kubeconfig
-4. Optionally remove Docker images
+4. Optionally remove local Podman images
 
 ### Useful Commands
 
@@ -132,7 +132,8 @@ The following ports are exposed from the cluster to localhost:
 
 ## Prerequisites
 
-- **Docker** or **Podman** (with Docker compatibility)
+- **Podman** with the **rootful API socket** enabled (`podman.socket` → `/run/podman/podman.sock`)
+- **`DOCKER_HOST=unix:///run/podman/podman.sock`** for k3d (set by Ansible / `teardown.sh` / manual exports)
 - **kubectl** - Kubernetes CLI
 - **Ansible** - For automation
 - **k3d** - Will be auto-installed by setup script
@@ -149,7 +150,7 @@ The following ports are exposed from the cluster to localhost:
 See `README.md` for detailed troubleshooting steps. Common issues:
 
 - **k3d not found**: The setup script will install it automatically
-- **Docker not running**: Start Docker daemon (`sudo systemctl start docker`)
+- **Podman socket missing**: `sudo systemctl enable --now podman.socket` and confirm `/run/podman/podman.sock` exists
 - **Port conflicts**: Edit `roles/k3d/defaults/main.yml` to change port mappings
 - **kubectl can't connect**: Run `k3d kubeconfig get gym-jinni > ~/.kube/gym-jinni-config`
 

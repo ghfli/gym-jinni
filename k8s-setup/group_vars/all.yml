@@ -1,0 +1,4 @@
+---
+# k3d talks to the container engine via the Docker API; point it at Podman's socket.
+k3d_docker_host: "unix:///run/podman/podman.sock"
+k3d_podman_socket_path: "/run/podman/podman.sock"

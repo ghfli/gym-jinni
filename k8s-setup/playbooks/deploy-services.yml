@@ -1,5 +1,5 @@
 ---
-- name: Build Docker images for gym-jinni services
+- name: Build container images for gym-jinni services
   hosts: localhost
   gather_facts: yes
   roles:

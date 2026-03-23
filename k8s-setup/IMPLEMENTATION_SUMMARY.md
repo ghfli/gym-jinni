@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document summarizes the complete implementation of a Kubernetes test environment for the gym-jinni project using k3d (K3s in Docker), Ansible, and Docker.
+This document summarizes the complete implementation of a Kubernetes test environment for the gym-jinni project using k3d (K3s in Linux containers via Podman’s Docker API), Ansible, and Podman.
 
 ## What Was Implemented
 
@@ -18,7 +18,7 @@ This document summarizes the complete implementation of a Kubernetes test enviro
 
 **Roles:**
 - `roles/k3d/` - Installs k3d and creates cluster
-- `roles/build-images/` - Builds Docker images for all services
+- `roles/build-images/` - Builds container images with Podman and imports into k3d
 - `roles/gym-jinni/` - Deploys services to Kubernetes
 
 **Archived (Old Implementation):**
@@ -38,9 +38,9 @@ All manifests are in `manifests/` directory:
 - `ui-deployment.yml` - Flutter UI (2 replicas, port 80)
 - `ingress.yml` - Ingress controller with routing rules
 
-### 3. Docker Images (✓ Complete)
+### 3. Container Images (✓ Complete)
 
-Multi-stage Dockerfiles in `docker/` directory:
+Multi-stage Dockerfiles in `container/` directory:
 
 - `Dockerfile.service` - buf + sqlc codegen + Go build (Debian builder, Alpine runtime)
 - `Dockerfile.ui` - Flutter builder + Nginx runtime
@@ -54,13 +54,13 @@ Multi-stage Dockerfiles in `docker/` directory:
 ### 4. CI/CD Pipelines (✓ Complete)
 
 **GitHub Actions (`.github/workflows/deploy.yml`):**
-- Build and push images to GitHub Container Registry
+- Build and push images with Podman to GitHub Container Registry
 - Deploy to Kubernetes on push to main/master
 - Matrix build for `service` and `ui` images
 - Automated deployment verification
 
 **GitLab CI (`.gitlab-ci.yml`):**
-- Build images and push to GitLab Container Registry
+- Build images with Podman and push to GitLab Container Registry
 - Integration tests with PostgreSQL
 - Manual deployment trigger
 - Rollout status verification
@@ -100,7 +100,7 @@ Multi-stage Dockerfiles in `docker/` directory:
 
 ```
 Host Machine
-    ├── k3d Cluster (Docker network)
+    ├── k3d Cluster (Podman/CNI network)
     │   ├── k3d-gym-jinni-server-0 - Control Plane + Worker
     │   ├── k3d-gym-jinni-agent-0 - Worker
     │   ├── k3d-gym-jinni-agent-1 - Worker
@@ -222,7 +222,7 @@ kubectl logs -f deployment/main-service -n gym-jinni
 - **RAM**: 4GB+ recommended (vs 8GB+ with old approach)
 - **Disk**: 10GB+ free space
 - **OS**: Linux, macOS, or Windows with WSL2
-- **Docker**: Version 20.10+
+- **Podman**: recent stable with `podman.socket` enabled (rootful API at `/run/podman/podman.sock`)
 
 ### k3d Cluster
 - **Server node**: ~300MB RAM
@@ -271,12 +271,12 @@ kubectl logs -f deployment/main-service -n gym-jinni
 - ✅ No external dependencies
 - ✅ Lightweight (~1.5GB RAM)
 - ✅ Standard Kubernetes API
-- ✅ Better Docker integration
+- ✅ Works with Podman via `DOCKER_HOST`
 - ✅ Easier troubleshooting
 
 ## Known Limitations
 
-1. **Docker dependency** - Requires Docker (or Podman with Docker compatibility)
+1. **Podman + socket** - Requires rootful Podman API socket and matching `DOCKER_HOST` for k3d
 2. **No TLS** - All communication is unencrypted
 3. **Single PostgreSQL instance** - No database replication
 4. **Local storage only** - No distributed storage
@@ -302,17 +302,17 @@ kubectl logs -f deployment/main-service -n gym-jinni
 
 ### Common Issues
 
-**Issue**: Docker not running
+**Issue**: Podman socket missing
 ```bash
-# Solution: Start Docker
-sudo systemctl start docker
-sudo systemctl enable docker
+# Solution: Enable the API socket
+sudo systemctl enable --now podman.socket
+ls -l /run/podman/podman.sock
 ```
 
 **Issue**: k3d cluster creation fails
 ```bash
-# Solution: Check Docker and ports
-docker ps
+# Solution: Check Podman and ports
+sudo podman ps
 sudo ss -tulpn | grep -E ':(8080|8081|8082|8083|3000|6443)'
 # Kill processes using required ports
 ```
@@ -320,9 +320,10 @@ sudo ss -tulpn | grep -E ':(8080|8081|8082|8083|3000|6443)'
 **Issue**: Services not deploying
 ```bash
 # Solution: Check images
-docker images | grep gym-jinni
+sudo podman images | grep gym-jinni
 # Import images if needed
-k3d image import gym-jinni/service:latest -c gym-jinni
+export DOCKER_HOST=unix:///run/podman/podman.sock
+sudo -E k3d image import gym-jinni/service:latest -c gym-jinni
 ```
 
 **Issue**: Database connection fails
@@ -335,7 +336,8 @@ kubectl exec -it postgres-0 -n gym-jinni -- psql -U root -d gj
 **Issue**: kubectl can't connect
 ```bash
 # Solution: Refresh kubeconfig
-k3d kubeconfig get gym-jinni > ~/.kube/gym-jinni-config
+export DOCKER_HOST=unix:///run/podman/podman.sock
+sudo -E k3d kubeconfig get gym-jinni > ~/.kube/gym-jinni-config
 export KUBECONFIG=$HOME/.kube/gym-jinni-config
 ```
 
@@ -379,8 +381,9 @@ kubectl top nodes
 kubectl top pods -n gym-jinni
 
 # Check k3d cluster
-k3d cluster list
-k3d node list
+export DOCKER_HOST=unix:///run/podman/podman.sock
+sudo -E k3d cluster list
+sudo -E k3d node list
 
 # Clean up old resources
 kubectl delete pod --field-selector=status.phase==Failed -n gym-jinni
@@ -426,7 +429,7 @@ After encountering fundamental issues with Podman + MicroK8s (cgroup and AppArmo
 3. **Reliable** - Handles all container complexities automatically
 4. **Fast** - 5x faster setup than previous approach
 5. **Simple** - Single command to create/delete clusters
-6. **Compatible** - Works with standard Docker and provides full K8s API
+6. **Compatible** - Works with Podman (Docker API) and provides full K8s API
 
 For production deployment, additional hardening and security measures should be implemented as outlined in the Security Considerations section.
 
