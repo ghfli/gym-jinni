@@ -91,7 +91,7 @@ kubectl port-forward -n gym-jinni svc/postgres 5432:5432
 
 Then access:
 - CSR Service HTTP: http://localhost:8083/v1/roles
-- Main Service HTTP: http://localhost:8081/v1/users
+- Main Service HTTP: http://localhost:8081/v1/roles
 - UI: http://localhost:8000
 
 ### 4. Teardown

@@ -200,7 +200,7 @@ kubectl port-forward -n gym-jinni svc/main-service 8081:8081
 curl http://localhost:8083/v1/roles
 
 kubectl port-forward -n gym-jinni svc/main-service 8081:8081
-curl http://localhost:8081/v1/users
+curl http://localhost:8081/v1/roles
 
 # 5. Check logs
 kubectl logs -f deployment/main-service -n gym-jinni

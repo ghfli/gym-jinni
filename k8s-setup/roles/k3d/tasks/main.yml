@@ -70,22 +70,30 @@
   register: cluster_create
   changed_when: cluster_create.rc == 0
 
+# Ensure ~/.kube exists and is owned by the Ansible user. A root-owned ~/.kube
+# is common (e.g. from other tools); shell redirection in "sudo cmd > file"
+# opens the file as the normal user, which then fails with "Permission denied".
 - name: Create .kube directory
   file:
     path: "{{ ansible_env.HOME }}/.kube"
     state: directory
     mode: '0755'
+    owner: "{{ ansible_user_id }}"
+    group: "{{ ansible_user_gid }}"
+  become: true
 
-- name: Export kubeconfig
-  shell: sudo -E k3d kubeconfig get {{ k3d_cluster_name }} > {{ k3d_kubeconfig_path }}
+# Avoid "sudo ... > path": the redirect is handled by the user shell, not root.
+- name: Fetch kubeconfig from k3d
+  shell: sudo -E k3d kubeconfig get {{ k3d_cluster_name }}
   environment:
     DOCKER_HOST: "{{ k3d_docker_host }}"
   register: kubeconfig_export
-  changed_when: kubeconfig_export.rc == 0
+  changed_when: false
 
-- name: Set kubeconfig permissions
-  file:
-    path: "{{ k3d_kubeconfig_path }}"
+- name: Write kubeconfig file
+  copy:
+    dest: "{{ k3d_kubeconfig_path }}"
+    content: "{{ kubeconfig_export.stdout }}\n"
     mode: '0600'
 
 - name: Wait for cluster to be ready

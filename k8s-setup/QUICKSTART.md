@@ -26,7 +26,6 @@ kubectl port-forward -n gym-jinni svc/main-service 8080:8080 8081:8081 &
 
 # 6. Test endpoints
 curl http://localhost:8081/v1/roles
-curl http://localhost:8081/v1/users
 ```
 
 ## Prerequisites

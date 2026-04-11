@@ -1,7 +1,11 @@
 ---
+# ansible.cfg enables become=true globally; k3d writes kubeconfig to the
+# invoking user's ~/.kube/ (setup-cluster-k3d.yml uses become: no). Run these
+# plays without privilege escalation so kubectl sees that kubeconfig.
 - name: Build container images for gym-jinni services
   hosts: localhost
   gather_facts: yes
+  become: no
   roles:
     - role: build-images
       tags: ['build', 'images']
@@ -9,6 +13,7 @@
 - name: Deploy gym-jinni services to Kubernetes
   hosts: localhost
   gather_facts: yes
+  become: no
   roles:
     - role: gym-jinni
       tags: ['deploy', 'services']
@@ -16,6 +21,7 @@
 - name: Verify deployment
   hosts: localhost
   gather_facts: no
+  become: no
   tasks:
     - name: Wait for PostgreSQL to be ready
       shell: |

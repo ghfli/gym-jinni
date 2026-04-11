@@ -21,7 +21,10 @@ RUN go mod download
 COPY service/ ./
 
 WORKDIR /build/service
-RUN buf dep update
+RUN cd user/pb && buf mod update \
+    && cd ../../class/pb && buf mod update \
+    && cd ../../rbac/pb && buf mod update \
+    && cd ../../validator/pb && buf mod update
 RUN buf generate
 RUN (cd user/db && sqlc generate) && \
     (cd class/db && sqlc generate) && \
@@ -30,7 +33,10 @@ RUN (cd user/db && sqlc generate) && \
 RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o /out/service .
 
 FROM docker.io/library/alpine:3.23
-RUN apk add --no-cache ca-certificates bash curl
+RUN apk add --no-cache ca-certificates bash curl \
+  && curl -fsSL https://github.com/golang-migrate/migrate/releases/download/v4.15.2/migrate.linux-amd64.tar.gz \
+    | tar -xz -C /usr/local/bin \
+  && chmod +x /usr/local/bin/migrate
 WORKDIR /app/service
 COPY --from=builder /out/service /app/service/service
 COPY service/mig/ /app/service/mig/
