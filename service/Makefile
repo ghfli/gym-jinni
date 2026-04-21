@@ -22,8 +22,10 @@ test: all pgup
 bufmcc:
 	buf mod clear-cache
 
+# Per-module `buf dep update` fails for protos that import sibling workspace modules
+# (Buf still resolves them for buf build / buf generate). BSR deps stay pinned in buf.lock.
 bufmup:
-	for s in ${SVCS} validator ; do buf mod update $$s/pb ; done
+	@:
 
 buflint: bufmup
 	buf lint

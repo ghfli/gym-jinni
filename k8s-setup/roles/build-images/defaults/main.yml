@@ -1,3 +1,3 @@
 ---
-# k3d image import uses the Docker API against Podman; override in group_vars/all.yml if needed.
-k3d_docker_host: "unix:///run/podman/podman.sock"
+# k3d image import uses the same Docker API socket as the cluster; override in group_vars/all.yml if needed.
+k3d_docker_host: "unix:///var/run/docker.sock"

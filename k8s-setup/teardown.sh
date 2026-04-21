@@ -1,8 +1,8 @@
 #!/bin/bash
 set -e
 
-# k3d uses the Docker API; with Podman this must point at the rootful API socket.
-export DOCKER_HOST="${DOCKER_HOST:-unix:///run/podman/podman.sock}"
+# k3d uses the Docker API; default to the local Docker daemon socket.
+export DOCKER_HOST="${DOCKER_HOST:-unix:///var/run/docker.sock}"
 
 # Colors for output
 RED='\033[0;31m'
@@ -47,7 +47,7 @@ if [ "$FORCE" = false ]; then
     echo "  - Delete all Kubernetes resources in gym-jinni namespace"
     echo "  - Delete the k3d cluster"
     echo "  - Remove kubeconfig file"
-    echo "  - Optionally remove local container images (podman)"
+    echo "  - Optionally remove local container images (docker)"
     echo ""
     read -p "Are you sure you want to continue? (yes/no): " -r
     echo ""
@@ -101,25 +101,25 @@ echo ""
 # Step 4: Clean up local container images (optional)
 echo -e "${YELLOW}Step 4: Cleaning up container images...${NC}"
 if [ "$FORCE" = false ]; then
-    read -p "Do you want to remove built container images (podman)? (yes/no): " -r
+    read -p "Do you want to remove built container images (docker)? (yes/no): " -r
     echo ""
     if [[ $REPLY =~ ^[Yy][Ee][Ss]$ ]]; then
-        sudo podman rmi gym-jinni/service:latest 2>/dev/null || true
-        sudo podman rmi gym-jinni/ui:latest 2>/dev/null || true
+        sudo docker rmi gym-jinni/service:latest 2>/dev/null || true
+        sudo docker rmi gym-jinni/ui:latest 2>/dev/null || true
         echo -e "${GREEN}✓ Container images removed${NC}"
     else
         echo -e "${YELLOW}⚠ Skipping container image removal${NC}"
     fi
 else
-    sudo podman rmi gym-jinni/service:latest 2>/dev/null || true
-    sudo podman rmi gym-jinni/ui:latest 2>/dev/null || true
+    sudo docker rmi gym-jinni/service:latest 2>/dev/null || true
+    sudo docker rmi gym-jinni/ui:latest 2>/dev/null || true
     echo -e "${GREEN}✓ Container images removed${NC}"
 fi
 echo ""
 
 # Final cleanup
 echo -e "${YELLOW}Performing final cleanup...${NC}"
-sudo podman system prune -f 2>/dev/null || true
+sudo docker system prune -f 2>/dev/null || true
 
 echo ""
 echo -e "${GREEN}========================================${NC}"

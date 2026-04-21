@@ -8,7 +8,7 @@
 - name: Build main service container image
   shell: |
     cd {{ playbook_dir }}/../../
-    sudo podman build -f k8s-setup/container/Dockerfile.service -t gym-jinni/service:latest .
+    sudo docker build -f k8s-setup/container/Dockerfile.service -t gym-jinni/service:latest .
   args:
     chdir: "{{ playbook_dir }}/../../"
   register: build_service
@@ -19,7 +19,7 @@
 - name: Build UI container image
   shell: |
     cd {{ playbook_dir }}/../../
-    sudo podman build -f k8s-setup/container/Dockerfile.ui -t gym-jinni/ui:latest .
+    sudo docker build -f k8s-setup/container/Dockerfile.ui -t gym-jinni/ui:latest .
   args:
     chdir: "{{ playbook_dir }}/../../"
   register: build_ui

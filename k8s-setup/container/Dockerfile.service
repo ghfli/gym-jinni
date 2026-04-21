@@ -21,10 +21,9 @@ RUN go mod download
 COPY service/ ./
 
 WORKDIR /build/service
-RUN cd user/pb && buf mod update \
-    && cd ../../class/pb && buf mod update \
-    && cd ../../rbac/pb && buf mod update \
-    && cd ../../validator/pb && buf mod update
+# Do not run `buf mod update`/`buf dep update` per module here: those commands resolve
+# each module in isolation and fail on workspace imports (e.g. user → validator).
+# buf.build pins live in committed buf.lock; `buf generate` uses buf.work.yaml and succeeds.
 RUN buf generate
 RUN (cd user/db && sqlc generate) && \
     (cd class/db && sqlc generate) && \

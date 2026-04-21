@@ -17,11 +17,12 @@ echo -e "${YELLOW}Checking prerequisites...${NC}"
 
 command -v ansible-playbook >/dev/null 2>&1 || { echo -e "${RED}Error: ansible is not installed${NC}" >&2; exit 1; }
 command -v kubectl >/dev/null 2>&1 || { echo -e "${RED}Error: kubectl is not installed${NC}" >&2; exit 1; }
-command -v podman >/dev/null 2>&1 || { echo -e "${RED}Error: podman is not installed${NC}" >&2; exit 1; }
+command -v docker >/dev/null 2>&1 || { echo -e "${RED}Error: docker is not installed${NC}" >&2; exit 1; }
 
-if [ ! -S /run/podman/podman.sock ]; then
-    echo -e "${RED}Error: Podman API socket not found at /run/podman/podman.sock${NC}" >&2
-    echo "Enable it with: sudo systemctl enable --now podman.socket" >&2
+# k3d uses the Docker API; require a reachable daemon (same engine Ansible uses).
+if ! docker info >/dev/null 2>&1 && ! sudo docker info >/dev/null 2>&1; then
+    echo -e "${RED}Error: Docker daemon is not reachable (required for k3d).${NC}" >&2
+    echo "Start Docker (e.g. sudo systemctl start docker) or ensure your user can run \`docker info\`." >&2
     exit 1
 fi
 
@@ -141,7 +142,7 @@ echo "  k3d cluster list"
 echo "  k3d node list"
 echo ""
 echo "  # Access k3d nodes directly (if needed)"
-echo "  podman exec -it k3d-gym-jinni-server-0 sh"
+echo "  docker exec -it k3d-gym-jinni-server-0 sh"
 echo ""
 echo -e "${YELLOW}Service Endpoints (after port-forward):${NC}"
 echo ""

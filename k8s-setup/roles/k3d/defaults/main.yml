@@ -1,9 +1,8 @@
 ---
 # Default variables for k3d role
-# k3d uses the Docker API; with Podman, point DOCKER_HOST at the rootful podman socket.
+# k3d uses the Docker API against the local Docker daemon socket.
 # Override in group_vars/all.yml if needed.
-k3d_docker_host: "unix:///run/podman/podman.sock"
-k3d_podman_socket_path: "/run/podman/podman.sock"
+k3d_docker_host: "unix:///var/run/docker.sock"
 
 k3d_version: "v5.6.0"
 k3d_cluster_name: "gym-jinni"
