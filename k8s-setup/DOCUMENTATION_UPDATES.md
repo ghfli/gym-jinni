@@ -4,6 +4,8 @@
 
 All documentation in the `k8s-setup/` directory has been updated to reflect the new k3d-based implementation, replacing the previous Podman + MicroK8s/K3s approach.
 
+**Host LB ports:** k3d publishes `39080`, `39081`, and `39300` on the host (see `roles/k3d/defaults/main.yml`) so `docker-proxy` does not occupy `808x`/`3000`, leaving those free for `kubectl port-forward` and local dev tools. Matching **NodePort**s are set on `main-service` and `ui` so those publishes reach the pods.
+
 ## Files Updated
 
 ### ✅ 1. README.md

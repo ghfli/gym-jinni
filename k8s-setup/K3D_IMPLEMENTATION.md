@@ -122,13 +122,14 @@ k3d image import <image-name> -c gym-jinni
 
 ## Port Mappings
 
-The following ports are exposed from the cluster to localhost:
+The following **host** ports are published by the k3d server load balancer (via `docker-proxy`). They use the `39xxx` range so the host does not bind `3000` or `8080`–`8083`, which avoids colliding with optional `kubectl port-forward` to those same local ports and with common dev servers.
 
-- `8080` → Main service gRPC (NodePort 30080)
-- `8081` → Main service HTTP (NodePort 30081)
-- `8082` → CSR service gRPC (NodePort 30082)
-- `8083` → CSR service HTTP (NodePort 30083)
-- `3000` → UI (NodePort 30000)
+- `39080` → Main service gRPC (`main-service` NodePort `30080`)
+- `39081` → Main service HTTP (NodePort `30081`)
+- `39300` → UI (NodePort `30000`)
+- `6443` → Kubernetes API server
+
+Services must use `type: NodePort` with these `nodePort` values so the LB is not forwarding to unused node ports (which yields empty TCP replies from `curl`).
 
 ## Prerequisites
 

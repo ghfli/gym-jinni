@@ -21,11 +21,11 @@ chmod +x setup.sh
 export KUBECONFIG=$HOME/.kube/gym-jinni-config
 kubectl get pods -n gym-jinni
 
-# 5. Port forward to test (user + RBAC share main-service HTTP)
-kubectl port-forward -n gym-jinni svc/main-service 8080:8080 8081:8081 &
+# 5. Hit the API via k3d LB (no port-forward needed), or port-forward if you prefer localhost:808x
+curl http://localhost:39081/v1/roles
 
-# 6. Test endpoints
-curl http://localhost:8081/v1/roles
+# Optional: kubectl port-forward -n gym-jinni svc/main-service 8080:8080 8081:8081 &
+# curl http://localhost:8081/v1/roles
 ```
 
 ## Prerequisites
@@ -52,12 +52,15 @@ sudo systemctl enable --now podman.socket
 
 ## Service Ports
 
-| Service | gRPC | HTTP | Description |
-|---------|------|------|-------------|
-| Main Service | 8080 | 8081 | Users, classes, RBAC (same process) |
-| UI | - | 3000 | Flutter web interface |
-| PostgreSQL | 5432 | - | Database |
-| K8s API | 6443 | - | Kubernetes API server |
+| Service | gRPC (in-cluster) | HTTP (in-cluster) | Host via k3d LB |
+|---------|-------------------|-------------------|-----------------|
+| Main Service | 8080 | 8081 | 39080 / 39081 |
+| CSR (RBAC) | 8080 | 8081 | same as main (`main-service` in-cluster) |
+| UI | - | Service :80, NodePort 30000 | http://localhost:39300 |
+| PostgreSQL | - | 5432 | not published by default |
+| K8s API | - | HTTPS | localhost:6443 |
+
+`main-service` and `ui` use **NodePort** `30080` / `30081` / `30000` so k3d’s LB port publishes (`39080` / `39081` / `39300`) reach real backends. **390xx / 39300** are the **host** ports so they do not conflict with `docker-proxy` on `808x`/`3000` or with local `kubectl port-forward`.
 
 ## Common Commands
 
@@ -137,14 +140,14 @@ kubectl get svc -n gym-jinni
 # Check endpoints
 kubectl get endpoints -n gym-jinni
 
-# Port forward manually
+# Port forward manually (optional; LB URLs use 39081 etc.)
 kubectl port-forward -n gym-jinni svc/main-service 8081:8081
 ```
 
 ### Port already in use
 ```bash
-# Check what's using the port
-sudo ss -tulpn | grep :8080
+# Check what's using the port (k3d LB publishes 39080, 39081, 39300)
+sudo ss -tulpn | grep -E ':3908|:39300|:6443'
 
 # Kill the process or use different ports
 # Edit roles/k3d/defaults/main.yml to change port mappings

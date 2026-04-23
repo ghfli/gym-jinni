@@ -11,12 +11,12 @@ k3d_agents: 2
 k3d_api_port: 6443
 k3d_kubeconfig_path: "{{ ansible_env.HOME }}/.kube/gym-jinni-config"
 
-# Port mappings for services
+# Port mappings for services (host -> k3d LB -> NodePort inside the cluster).
+# Use 39xxx on the host so docker-proxy does not occupy 3000/808x; those stay
+# free for kubectl port-forward, Flutter/Node dev servers, and similar tools.
 # Format: host_port:container_port@loadbalancer
 k3d_port_mappings:
-  - "8080:30080@loadbalancer"  # Main service gRPC
-  - "8081:30081@loadbalancer"  # Main service HTTP
-  - "8082:30082@loadbalancer"  # CSR service gRPC
-  - "8083:30083@loadbalancer"  # CSR service HTTP
-  - "3000:30000@loadbalancer"  # UI
+  - "39080:30080@loadbalancer"  # Main service gRPC (Service nodePort 30080)
+  - "39081:30081@loadbalancer"  # Main service HTTP (nodePort 30081); CSR uses same API
+  - "39300:30000@loadbalancer"  # UI (Service nodePort 30000)
 

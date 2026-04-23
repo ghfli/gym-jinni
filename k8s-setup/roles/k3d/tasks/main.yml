@@ -55,7 +55,7 @@
   register: cluster_delete
   changed_when: cluster_delete.rc == 0
 
-# Same cluster name on another engine still binds host ports (6443, nodeports, etc.).
+# Same cluster name on another engine still binds host ports (6443, k3d LB 390xx, etc.).
 # If k3d_docker_host is not the default socket, detect a stale same-named cluster there.
 - name: Check default Docker socket for conflicting k3d cluster name
   shell: >-

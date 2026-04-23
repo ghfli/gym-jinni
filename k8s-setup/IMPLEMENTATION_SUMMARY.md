@@ -106,10 +106,10 @@ Host Machine
     │   ├── k3d-gym-jinni-agent-1 - Worker
     │   └── k3d-gym-jinni-serverlb - LoadBalancer
     │
-    └── Port Mappings (via LoadBalancer)
-        ├── 8080:30080 (Main Service gRPC)
-        ├── 8081:30081 (Main Service HTTP)
-        ├── 3000:30000 (UI)
+    └── Port Mappings (via LoadBalancer, host -> NodePort)
+        ├── 39080:30080 (Main Service gRPC, Service nodePort)
+        ├── 39081:30081 (Main Service HTTP, Service nodePort)
+        ├── 39300:30000 (UI, Service nodePort)
         └── 6443:6443 (K8s API)
 ```
 
@@ -195,10 +195,11 @@ k3d cluster list
 # 3. Verify pods
 kubectl get pods -n gym-jinni
 
-# 4. Test services
-kubectl port-forward -n gym-jinni svc/main-service 8081:8081
-curl http://localhost:8083/v1/roles
+# 4. Test services (via k3d LB on the host)
+curl http://localhost:39081/v1/roles
+curl -sS -o /dev/null -w "%{http_code}\n" http://localhost:39300/
 
+# Or via kubectl port-forward (localhost matches in-cluster ports)
 kubectl port-forward -n gym-jinni svc/main-service 8081:8081
 curl http://localhost:8081/v1/roles
 
@@ -313,7 +314,7 @@ ls -l /run/podman/podman.sock
 ```bash
 # Solution: Check Podman and ports
 sudo podman ps
-sudo ss -tulpn | grep -E ':(8080|8081|8082|8083|3000|6443)'
+sudo ss -tulpn | grep -E ':(39080|39081|39300|6443)'
 # Kill processes using required ports
 ```
 

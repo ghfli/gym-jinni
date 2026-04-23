@@ -10,9 +10,10 @@ This directory contains the complete setup for a Kubernetes cluster using k3d, o
   - Fast setup and teardown
 - **Services deployed**:
   - PostgreSQL (StatefulSet with persistent storage)
-  - CSR Service (RBAC) - gRPC: 8082, HTTP: 8083
-  - Main Service (User/Class) - gRPC: 8080, HTTP: 8081
-  - UI (Flutter web) - HTTP: 3000
+  - CSR Service (RBAC) - same `main-service` endpoints as user/class API (gRPC `8080`, HTTP `8081` in-cluster; see `configmaps.yml`)
+  - Main Service (User/Class) - gRPC: 8080, HTTP: 8081 (in-cluster)
+  - UI (Flutter web) - Service port 80, **NodePort** `30000` (required so k3d LB `39300:30000` reaches the pods)
+- **Host access via k3d load balancer** (`roles/k3d/defaults/main.yml`): `39080`, `39081`, `39300` on localhost (avoids binding `808x`/`3000` on the host so `kubectl port-forward` and local dev tools can use those ports)
 - **Ansible** playbooks for automation
 - **CI/CD** pipelines (GitHub Actions & GitLab CI)
 
@@ -73,26 +74,32 @@ kubectl get ingress -n gym-jinni
 
 ### 3. Access services
 
-Port forward to access services from your host:
+After `./setup.sh`, the k3d server load balancer publishes **high host ports** so they do not overlap `docker-proxy` bindings that used to block `3000` and `8080`–`8083`.
+
+**Default (via k3d LB on localhost):**
+
+- Main Service gRPC: `localhost:39080`
+- Main Service HTTP: http://localhost:39081/v1/roles
+- CSR (RBAC): same URLs as main service (`CSR_SERVICE_*` in `configmaps.yml` points at `main-service:8080` / `:8081`)
+- UI: http://localhost:39300
+
+**Optional: `kubectl port-forward`** (uses the same numeric ports on your machine as in the cluster):
 
 ```bash
-# CSR Service
-kubectl port-forward -n gym-jinni svc/main-service 8080:8080 8081:8081
-
-# Main Service
+# Main + CSR APIs (same Deployment / Service)
 kubectl port-forward -n gym-jinni svc/main-service 8080:8080 8081:8081
 
 # UI
-kubectl port-forward -n gym-jinni svc/ui 8000:80
+kubectl port-forward -n gym-jinni svc/ui 3000:80
 
 # PostgreSQL (for debugging)
 kubectl port-forward -n gym-jinni svc/postgres 5432:5432
 ```
 
-Then access:
-- CSR Service HTTP: http://localhost:8083/v1/roles
-- Main Service HTTP: http://localhost:8081/v1/roles
-- UI: http://localhost:8000
+Then access (port-forward path):
+
+- Main / CSR HTTP: http://localhost:8081/v1/roles
+- UI: http://localhost:3000
 
 ### 4. Teardown
 
@@ -297,7 +304,7 @@ kubectl logs <pod-name> -n gym-jinni
 k3d cluster list
 
 # Check if ports are in use
-netstat -tulpn | grep -E '8080|8081|8082|8083|3000'
+netstat -tulpn | grep -E '39080|39081|39300|6443'
 
 # Recreate cluster with different ports if needed
 k3d cluster delete gym-jinni
