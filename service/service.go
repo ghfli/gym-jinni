@@ -86,5 +86,19 @@ func runGatewayServer() error {
 	}
 
 	log.Println("gRPC gateway server listening on", *gatewayAddr)
-	return http.ListenAndServe(*gatewayAddr, mux)
+	return http.ListenAndServe(*gatewayAddr, withCORS(mux))
+}
+
+// withCORS wraps the gateway so Flutter web (or other browsers) can call the API cross-origin during local dev.
+func withCORS(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, PATCH, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Accept, Authorization, Grpc-Metadata-user-id")
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		h.ServeHTTP(w, r)
+	})
 }
