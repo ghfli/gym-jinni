@@ -19,7 +19,7 @@ func main() {
 }
 
 func run() error {
-	connectTo := "127.0.0.1:8080"
+	connectTo := "127.0.0.1:39080"
 	conn, err := grpc.Dial(connectTo, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return fmt.Errorf("failed to connect to %s: %w", connectTo, err)
