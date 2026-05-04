@@ -14,8 +14,12 @@ k3d_kubeconfig_path: "{{ ansible_env.HOME }}/.kube/gym-jinni-config"
 # Port mappings for services (host -> k3d LB -> NodePort inside the cluster).
 # Use 39xxx on the host so docker-proxy does not occupy 3000/808x; those stay
 # free for kubectl port-forward, Flutter/Node dev servers, and similar tools.
+# Ports 80 and 443 are mapped directly for the ingress controller (Traefik)
+# so that Let's Encrypt HTTP-01 challenges and HTTPS traffic reach the cluster.
 # Format: host_port:container_port@loadbalancer
 k3d_port_mappings:
+  - "80:80@loadbalancer"        # HTTP — Let's Encrypt HTTP-01 challenge + redirect
+  - "443:443@loadbalancer"      # HTTPS — TLS traffic via ingress controller
   - "39080:30080@loadbalancer"  # Main service gRPC (Service nodePort 30080)
   - "39081:30081@loadbalancer"  # Main service HTTP (nodePort 30081); CSR uses same API
   - "39300:30000@loadbalancer"  # UI (Service nodePort 30000)

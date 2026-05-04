@@ -1,3 +1,11 @@
 ---
 # k3d talks to the container engine via the Docker API (default Docker socket).
 k3d_docker_host: "unix:///var/run/docker.sock"
+
+# Public-facing domain and server IP. Change these to retarget the deployment
+# to a different host without editing individual manifest files.
+gym_jinni_domain: "gjdev.itcorker.com"
+gym_jinni_server_ip: "212.56.44.229"
+
+# Email used when registering the Let's Encrypt ACME account.
+acme_email: "newstart.infotech@gmail.com"

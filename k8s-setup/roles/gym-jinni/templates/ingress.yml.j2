@@ -11,10 +11,10 @@ spec:
   ingressClassName: public
   tls:
   - hosts:
-    - gjdev.itcorker.com
+    - {{ gym_jinni_domain }}
     secretName: gym-jinni-tls
   rules:
-  - host: gjdev.itcorker.com
+  - host: {{ gym_jinni_domain }}
     http:
       paths:
       - path: /

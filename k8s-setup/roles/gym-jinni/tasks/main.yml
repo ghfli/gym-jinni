@@ -60,10 +60,42 @@
   register: ui_result
   changed_when: "'created' in ui_result.stdout or 'configured' in ui_result.stdout"
 
+- name: Install cert-manager
+  shell: |
+    export KUBECONFIG={{ kubeconfig_path }}
+    kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.17.2/cert-manager.yaml
+  register: certmgr_result
+  changed_when: "'created' in certmgr_result.stdout or 'configured' in certmgr_result.stdout"
+
+- name: Wait for cert-manager webhooks to be ready
+  shell: |
+    export KUBECONFIG={{ kubeconfig_path }}
+    kubectl wait --for=condition=ready pod -l app.kubernetes.io/instance=cert-manager \
+      -n cert-manager --timeout=120s
+
+- name: Render ClusterIssuer manifest from template
+  template:
+    src: cluster-issuer.yml.j2
+    dest: /tmp/gym-jinni-cluster-issuer.yml
+    mode: '0644'
+
+- name: Apply ClusterIssuer
+  shell: |
+    export KUBECONFIG={{ kubeconfig_path }}
+    kubectl apply -f /tmp/gym-jinni-cluster-issuer.yml
+  register: issuer_result
+  changed_when: "'created' in issuer_result.stdout or 'configured' in issuer_result.stdout"
+
+- name: Render ingress manifest from template
+  template:
+    src: ingress.yml.j2
+    dest: /tmp/gym-jinni-ingress.yml
+    mode: '0644'
+
 - name: Apply ingress
   shell: |
     export KUBECONFIG={{ kubeconfig_path }}
-    kubectl apply -f {{ playbook_dir }}/../manifests/ingress.yml
+    kubectl apply -f /tmp/gym-jinni-ingress.yml
   register: ingress_result
   changed_when: "'created' in ingress_result.stdout or 'configured' in ingress_result.stdout"
 
