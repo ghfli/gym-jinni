@@ -33,8 +33,9 @@ RUN flutter pub get
 # Copy source code
 COPY ui/ ./
 
-# Build web app
-RUN flutter build web --release
+# Build web app. API_BASE is left empty so the app uses same-origin paths
+# (/v1/...) which nginx proxies to the backend service.
+RUN flutter build web --release --dart-define=API_BASE=
 
 # Final stage - nginx to serve the app
 FROM docker.io/library/nginx:stable-alpine
@@ -50,6 +51,11 @@ RUN echo 'server { \
     index index.html; \
     location / { \
         try_files $uri $uri/ /index.html; \
+    } \
+    location /v1/ { \
+        proxy_pass http://main-service:8081/v1/; \
+        proxy_set_header Host $host; \
+        proxy_set_header X-Real-IP $remote_addr; \
     } \
     location /api/ { \
         proxy_pass http://main-service:8081/; \
