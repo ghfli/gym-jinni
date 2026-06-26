@@ -1,5 +1,5 @@
 
-SVCS := user class rbac
+SVCS := user class rbac booking gym schedule payment notification activity
 DBURL := postgresql://root:gj@127.0.0.1:5432/gj?sslmode=disable&search_path=public
 
 all default: service grpcclt

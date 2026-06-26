@@ -1,0 +1,10 @@
+version: 2
+sql:
+  - schema: "../../schema/activity.sql"
+    queries: "activity.sqlc.sql"
+    engine: "postgresql"
+    gen:
+      go:
+        package: "activityv1alpha"
+        out: "../../gen/go/activity/v1alpha"
+        sql_package: "database/sql"

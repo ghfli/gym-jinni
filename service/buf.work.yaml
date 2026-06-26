@@ -3,4 +3,11 @@ directories:
   - user/pb
   - class/pb
   - rbac/pb
+  - booking/pb
+  - gym/pb
+  - schedule/pb
+  - payment/pb
+  - notification/pb
+  - activity/pb
+  - report/pb
   - validator/pb

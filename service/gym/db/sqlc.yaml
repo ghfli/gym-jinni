@@ -1,0 +1,10 @@
+version: 2
+sql:
+  - schema: "../../schema/gym.sql"
+    queries: "gym.sqlc.sql"
+    engine: "postgresql"
+    gen:
+      go:
+        package: "gymv1alpha"
+        out: "../../gen/go/gym/v1alpha"
+        sql_package: "database/sql"

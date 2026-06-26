@@ -1,0 +1,53 @@
+syntax = "proto3";
+
+package report.v1alpha;
+
+import "google/api/annotations.proto";
+
+message GetDashboardRequest {}
+
+message GetDashboardResponse {
+    int32 total_users = 1;
+    int32 total_classes = 2;
+    int32 total_bookings = 3;
+    int64 total_revenue = 4;
+}
+
+message GetRevenueReportRequest {
+    string start_date = 1;
+    string end_date = 2;
+}
+
+message GetRevenueReportResponse {
+    int64 total_revenue = 1;
+    int32 payment_count = 2;
+}
+
+message GetAttendanceReportRequest {}
+
+message GetAttendanceReportResponse {
+    int32 total_bookings = 1;
+    int32 confirmed = 2;
+    int32 cancelled = 3;
+    int32 completed = 4;
+}
+
+service ReportService {
+    rpc GetDashboard(GetDashboardRequest) returns (GetDashboardResponse) {
+        option (google.api.http) = {
+            get: "/v1/reports/dashboard"
+        };
+    }
+
+    rpc GetRevenueReport(GetRevenueReportRequest) returns (GetRevenueReportResponse) {
+        option (google.api.http) = {
+            get: "/v1/reports/revenue"
+        };
+    }
+
+    rpc GetAttendanceReport(GetAttendanceReportRequest) returns (GetAttendanceReportResponse) {
+        option (google.api.http) = {
+            get: "/v1/reports/attendance"
+        };
+    }
+}

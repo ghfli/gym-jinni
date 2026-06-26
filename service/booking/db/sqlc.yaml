@@ -1,0 +1,10 @@
+version: 2
+sql:
+  - schema: "../../schema/booking.sql"
+    queries: "booking.sqlc.sql"
+    engine: "postgresql"
+    gen:
+      go:
+        package: "bookingv1alpha"
+        out: "../../gen/go/booking/v1alpha"
+        sql_package: "database/sql"

@@ -1,0 +1,10 @@
+version: 2
+sql:
+  - schema: "../../schema/notification.sql"
+    queries: "notification.sqlc.sql"
+    engine: "postgresql"
+    gen:
+      go:
+        package: "notificationv1alpha"
+        out: "../../gen/go/notification/v1alpha"
+        sql_package: "database/sql"

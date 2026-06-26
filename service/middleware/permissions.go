@@ -45,6 +45,57 @@ var PermissionMapping = map[string]string{
 	"/rbac.v1alpha.RBACService/GetUserRoleDetails": "view_user",
 	"/rbac.v1alpha.RBACService/GetUsersWithRole":   "view_roles",
 	
+	// Booking service methods
+	"/booking.v1alpha.BookingService/CreateBooking":     "book_class",
+	"/booking.v1alpha.BookingService/CancelBooking":     "cancel_booking",
+	"/booking.v1alpha.BookingService/GetBooking":        "view_booking",
+	"/booking.v1alpha.BookingService/ListUserBookings":  "view_booking",
+	"/booking.v1alpha.BookingService/ListClassBookings": "view_booking",
+
+	// Trainer profile methods
+	"/user.v1alpha.UserService/GetTrainerProfile":    "view_user",
+	"/user.v1alpha.UserService/UpdateTrainerProfile": "update_user",
+	"/user.v1alpha.UserService/ListTrainers":         "view_user",
+
+	// Gym service methods
+	"/gym.v1alpha.GymService/CreateGym":    "manage_gym",
+	"/gym.v1alpha.GymService/GetGym":       "view_gym",
+	"/gym.v1alpha.GymService/ListGyms":     "view_gym",
+	"/gym.v1alpha.GymService/UpdateGym":    "manage_gym",
+	"/gym.v1alpha.GymService/AddMember":    "manage_gym",
+	"/gym.v1alpha.GymService/ListMembers":  "view_gym",
+
+	// Schedule service methods
+	"/schedule.v1alpha.ScheduleService/CreateSchedule": "manage_schedule",
+	"/schedule.v1alpha.ScheduleService/GetSchedule":    "view_schedule",
+	"/schedule.v1alpha.ScheduleService/ListSchedules":  "view_schedule",
+	"/schedule.v1alpha.ScheduleService/UpdateSchedule": "manage_schedule",
+	"/schedule.v1alpha.ScheduleService/DeleteSchedule": "manage_schedule",
+
+	// Payment service methods
+	"/payment.v1alpha.PaymentService/CreatePayment": "create_payment",
+	"/payment.v1alpha.PaymentService/GetPayment":    "view_payment",
+	"/payment.v1alpha.PaymentService/ListPayments":  "view_payment",
+	"/payment.v1alpha.PaymentService/RefundPayment": "manage_payment",
+
+	// Notification service methods
+	"/notification.v1alpha.NotificationService/SendNotification":  "send_notification",
+	"/notification.v1alpha.NotificationService/ListNotifications": "",
+	"/notification.v1alpha.NotificationService/MarkRead":          "",
+	"/notification.v1alpha.NotificationService/GetPreferences":    "",
+	"/notification.v1alpha.NotificationService/UpdatePreference":  "",
+
+	// Activity service methods
+	"/activity.v1alpha.ActivityService/LogActivity":    "",
+	"/activity.v1alpha.ActivityService/GetActivity":    "",
+	"/activity.v1alpha.ActivityService/ListActivities": "",
+	"/activity.v1alpha.ActivityService/GetStats":       "",
+
+	// Report service methods
+	"/report.v1alpha.ReportService/GetDashboard":        "view_reports",
+	"/report.v1alpha.ReportService/GetRevenueReport":    "view_reports",
+	"/report.v1alpha.ReportService/GetAttendanceReport": "view_reports",
+
 	// RBAC service methods - authorization (these should be accessible to check permissions)
 	"/rbac.v1alpha.RBACService/CheckPermission":                  "", // Authenticated users can check their own permissions
 	"/rbac.v1alpha.RBACService/CheckPermissionByResourceAction":  "", // Authenticated users can check their own permissions
@@ -53,8 +104,9 @@ var PermissionMapping = map[string]string{
 
 // PublicMethods lists methods that don't require authentication
 var PublicMethods = map[string]bool{
-	"/user.v1alpha.UserService/LoginUser": true,
-	"/user.v1alpha.UserService/CreateUser": true, // Allow public user registration
+	"/user.v1alpha.UserService/LoginUser":         true,
+	"/user.v1alpha.UserService/CreateUser":         true,
+	"/user.v1alpha.UserService/RenewAccessToken":   true,
 }
 
 // IsPublicMethod checks if a method is public

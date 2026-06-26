@@ -8,9 +8,26 @@ import (
 	"net"
 	"net/http"
 
+	activityv1alpha "github.com/ghfli/gym-jinni/service/gen/go/activity/v1alpha"
+	bookingv1alpha "github.com/ghfli/gym-jinni/service/gen/go/booking/v1alpha"
+	classv1alpha "github.com/ghfli/gym-jinni/service/gen/go/class/v1alpha"
+	gymv1alpha "github.com/ghfli/gym-jinni/service/gen/go/gym/v1alpha"
+	notificationv1alpha "github.com/ghfli/gym-jinni/service/gen/go/notification/v1alpha"
+	paymentv1alpha "github.com/ghfli/gym-jinni/service/gen/go/payment/v1alpha"
 	rbacv1alpha "github.com/ghfli/gym-jinni/service/gen/go/rbac/v1alpha"
+	reportv1alpha "github.com/ghfli/gym-jinni/service/gen/go/report/v1alpha"
+	schedulev1alpha "github.com/ghfli/gym-jinni/service/gen/go/schedule/v1alpha"
 	userv1alpha "github.com/ghfli/gym-jinni/service/gen/go/user/v1alpha"
+	"github.com/ghfli/gym-jinni/service/activity"
+	"github.com/ghfli/gym-jinni/service/booking"
+	"github.com/ghfli/gym-jinni/service/class"
+	"github.com/ghfli/gym-jinni/service/gym"
+	"github.com/ghfli/gym-jinni/service/middleware"
+	"github.com/ghfli/gym-jinni/service/notification"
+	"github.com/ghfli/gym-jinni/service/payment"
 	"github.com/ghfli/gym-jinni/service/rbac"
+	"github.com/ghfli/gym-jinni/service/report"
+	"github.com/ghfli/gym-jinni/service/schedule"
 	"github.com/ghfli/gym-jinni/service/user"
 	"github.com/grpc-ecosystem/go-grpc-middleware"
 	grpc_validator "github.com/grpc-ecosystem/go-grpc-middleware/validator"
@@ -56,12 +73,69 @@ func runGRPCServer() error {
 		return fmt.Errorf("failed to create RBAC service server: %w", err)
 	}
 
+	classsvc, err := class.NewImClassServiceServer()
+	if err != nil {
+		return fmt.Errorf("failed to create class service server: %w", err)
+	}
+
+	bookingsvc, err := booking.NewImBookingServiceServer()
+	if err != nil {
+		return fmt.Errorf("failed to create booking service server: %w", err)
+	}
+
+	gymsvc, err := gym.NewImGymServiceServer()
+	if err != nil {
+		return fmt.Errorf("failed to create gym service server: %w", err)
+	}
+
+	schedulesvc, err := schedule.NewImScheduleServiceServer()
+	if err != nil {
+		return fmt.Errorf("failed to create schedule service server: %w", err)
+	}
+
+	paymentsvc, err := payment.NewImPaymentServiceServer()
+	if err != nil {
+		return fmt.Errorf("failed to create payment service server: %w", err)
+	}
+
+	notificationsvc, err := notification.NewImNotificationServiceServer()
+	if err != nil {
+		return fmt.Errorf("failed to create notification service server: %w", err)
+	}
+
+	activitysvc, err := activity.NewImActivityServiceServer()
+	if err != nil {
+		return fmt.Errorf("failed to create activity service server: %w", err)
+	}
+
+	reportsvc, err := report.NewImReportServiceServer()
+	if err != nil {
+		return fmt.Errorf("failed to create report service server: %w", err)
+	}
+
+	// Loopback client for RBAC permission checks in the auth interceptor
+	rbacConn, err := grpc.Dial(*grpcServerEndpoint,
+		grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		log.Printf("Warning: could not create RBAC loopback client: %v", err)
+	}
+	rbacClient := rbacv1alpha.NewRBACServiceClient(rbacConn)
+
 	server := grpc.NewServer(
 		grpc.UnaryInterceptor(grpc_middleware.ChainUnaryServer(
 			grpc_validator.UnaryServerInterceptor(),
+			middleware.AuthInterceptor(rbacClient),
 		)))
 	userv1alpha.RegisterUserServiceServer(server, usersvc)
 	rbacv1alpha.RegisterRBACServiceServer(server, rbacsvc)
+	classv1alpha.RegisterClassServiceServer(server, classsvc)
+	bookingv1alpha.RegisterBookingServiceServer(server, bookingsvc)
+	gymv1alpha.RegisterGymServiceServer(server, gymsvc)
+	schedulev1alpha.RegisterScheduleServiceServer(server, schedulesvc)
+	paymentv1alpha.RegisterPaymentServiceServer(server, paymentsvc)
+	notificationv1alpha.RegisterNotificationServiceServer(server, notificationsvc)
+	activityv1alpha.RegisterActivityServiceServer(server, activitysvc)
+	reportv1alpha.RegisterReportServiceServer(server, reportsvc)
 
 	log.Println("gRPC server listening on", *grpcServerEndpoint)
 	if err := server.Serve(listener); err != nil {
@@ -82,6 +156,33 @@ func runGatewayServer() error {
 		return err
 	}
 	if err := rbacv1alpha.RegisterRBACServiceHandlerFromEndpoint(ctx, mux, *grpcServerEndpoint, opts); err != nil {
+		return err
+	}
+	if err := classv1alpha.RegisterClassServiceHandlerFromEndpoint(ctx, mux, *grpcServerEndpoint, opts); err != nil {
+		return err
+	}
+	if err := bookingv1alpha.RegisterBookingServiceHandlerFromEndpoint(ctx, mux, *grpcServerEndpoint, opts); err != nil {
+		return err
+	}
+	if err := gymv1alpha.RegisterGymServiceHandlerFromEndpoint(ctx, mux, *grpcServerEndpoint, opts); err != nil {
+		return err
+	}
+	if err := schedulev1alpha.RegisterScheduleServiceHandlerFromEndpoint(ctx, mux, *grpcServerEndpoint, opts); err != nil {
+		return err
+	}
+	if err := paymentv1alpha.RegisterPaymentServiceHandlerFromEndpoint(ctx, mux, *grpcServerEndpoint, opts); err != nil {
+		return err
+	}
+	if err := notificationv1alpha.RegisterNotificationServiceHandlerFromEndpoint(ctx, mux, *grpcServerEndpoint, opts); err != nil {
+		return err
+	}
+	if err := activityv1alpha.RegisterActivityServiceHandlerFromEndpoint(ctx, mux, *grpcServerEndpoint, opts); err != nil {
+		return err
+	}
+	if err := reportv1alpha.RegisterReportServiceHandlerFromEndpoint(ctx, mux, *grpcServerEndpoint, opts); err != nil {
+		return err
+	}
+	if err := userv1alpha.RegisterTrainerProfileGatewayHandlers(ctx, mux, *grpcServerEndpoint, opts); err != nil {
 		return err
 	}
 

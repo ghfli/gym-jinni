@@ -82,6 +82,15 @@ message LogoutUserResponse {
     string session_id = 2;
 }
 
+message RenewAccessTokenRequest {
+    string refresh_tkn = 1 [(validator.v1alpha.field) = {msg_exists: true, string_not_empty: true}];
+}
+
+message RenewAccessTokenResponse {
+    string access_tkn = 1;
+    google.type.DateTime access_tkn_exp_at = 2;
+}
+
 service UserService {
     rpc CreateUser (CreateUserRequest) returns (CreateUserResponse) {
         option (google.api.http) = {
@@ -95,9 +104,78 @@ service UserService {
             body: "*"
         };
     }
-    rpc GetUser (GetUserRequest) returns (GetUserResponse) {}
-    rpc UpdateUser (UpdateUserRequest) returns (UpdateUserResponse) {}
-    // rpc RenewAccTkn (RenewAccTknReq) returns (RenewAccTknResponse) {}
-    rpc DeleteUser (DeleteUserRequest) returns (DeleteUserResponse) {}
-    rpc LogoutUser (LogoutUserRequest) returns (LogoutUserResponse) {}
+    rpc GetUser (GetUserRequest) returns (GetUserResponse) {
+        option (google.api.http) = {
+            get: "/v1/users/{user.id}"
+        };
+    }
+    rpc UpdateUser (UpdateUserRequest) returns (UpdateUserResponse) {
+        option (google.api.http) = {
+            put: "/v1/users/{user.id}"
+            body: "*"
+        };
+    }
+    rpc RenewAccessToken (RenewAccessTokenRequest) returns (RenewAccessTokenResponse) {
+        option (google.api.http) = {
+            post: "/v1/renew_token"
+            body: "*"
+        };
+    }
+    rpc DeleteUser (DeleteUserRequest) returns (DeleteUserResponse) {
+        option (google.api.http) = {
+            delete: "/v1/users/{user.id}"
+        };
+    }
+    rpc LogoutUser (LogoutUserRequest) returns (LogoutUserResponse) {
+        option (google.api.http) = {
+            post: "/v1/logout_user"
+            body: "*"
+        };
+    }
+    rpc GetTrainerProfile (GetTrainerProfileRequest) returns (GetTrainerProfileResponse) {
+        option (google.api.http) = {
+            get: "/v1/users/{user_id}/trainer_profile"
+        };
+    }
+    rpc UpdateTrainerProfile (UpdateTrainerProfileRequest) returns (UpdateTrainerProfileResponse) {
+        option (google.api.http) = {
+            put: "/v1/trainer_profile"
+            body: "*"
+        };
+    }
+    rpc ListTrainers (ListTrainersRequest) returns (ListTrainersResponse) {
+        option (google.api.http) = {
+            get: "/v1/trainers"
+        };
+    }
+}
+
+message TrainerProfile {
+    int32 user_id = 1;
+    string bio = 2;
+    repeated string specializations = 3;
+    repeated string certifications = 4;
+    int32 hourly_rate = 5;
+}
+
+message GetTrainerProfileRequest {
+    int32 user_id = 1;
+}
+
+message GetTrainerProfileResponse {
+    TrainerProfile profile = 1;
+}
+
+message UpdateTrainerProfileRequest {
+    TrainerProfile profile = 1;
+}
+
+message UpdateTrainerProfileResponse {
+    TrainerProfile profile = 1;
+}
+
+message ListTrainersRequest {}
+
+message ListTrainersResponse {
+    repeated TrainerProfile profiles = 1;
 }

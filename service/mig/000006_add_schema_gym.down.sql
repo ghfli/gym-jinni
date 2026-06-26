@@ -1,0 +1,3 @@
+DROP TABLE IF EXISTS gym.membership;
+DROP TABLE IF EXISTS gym.gym;
+DROP SCHEMA IF EXISTS gym;

@@ -1,0 +1,2 @@
+DROP TABLE IF EXISTS payment.payment;
+DROP SCHEMA IF EXISTS payment;

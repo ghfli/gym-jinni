@@ -22,3 +22,13 @@ CREATE TABLE "user"."session" (
   expires_at timestamptz NOT NULL,
   created_at timestamptz NOT NULL
 );
+
+CREATE TABLE "user".trainer_profile (
+  id serial PRIMARY KEY,
+  user_id int NOT NULL UNIQUE REFERENCES "user"."user" (id),
+  bio text,
+  specializations text[],
+  certifications text[],
+  hourly_rate int,
+  created_at timestamptz NOT NULL DEFAULT now()
+);

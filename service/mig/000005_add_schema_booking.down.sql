@@ -1,0 +1,2 @@
+DROP TABLE IF EXISTS booking.booking;
+DROP SCHEMA IF EXISTS booking;

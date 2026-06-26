@@ -1,0 +1,92 @@
+syntax = "proto3";
+
+package activity.v1alpha;
+
+import "google/type/datetime.proto";
+import "google/api/annotations.proto";
+
+message Activity {
+    int32 id = 1;
+    int32 user_id = 2;
+    int32 gym_id = 3;
+    string activity_type = 4;
+    string title = 5;
+    string description = 6;
+    int32 duration_minutes = 7;
+    int32 calories = 8;
+    int32 distance_meters = 9;
+    google.type.DateTime created_at = 10;
+}
+
+message ActivityStats {
+    int64 total_count = 1;
+    int64 total_duration = 2;
+    int64 total_calories = 3;
+    int64 total_distance = 4;
+}
+
+message LogActivityRequest {
+    int32 user_id = 1;
+    int32 gym_id = 2;
+    string activity_type = 3;
+    string title = 4;
+    string description = 5;
+    int32 duration_minutes = 6;
+    int32 calories = 7;
+    int32 distance_meters = 8;
+}
+
+message LogActivityResponse {
+    Activity activity = 1;
+}
+
+message GetActivityRequest {
+    int32 id = 1;
+}
+
+message GetActivityResponse {
+    Activity activity = 1;
+}
+
+message ListActivitiesRequest {
+    int32 user_id = 1;
+}
+
+message ListActivitiesResponse {
+    repeated Activity activities = 1;
+}
+
+message GetStatsRequest {
+    int32 user_id = 1;
+}
+
+message GetStatsResponse {
+    ActivityStats stats = 1;
+}
+
+service ActivityService {
+    rpc LogActivity(LogActivityRequest) returns (LogActivityResponse) {
+        option (google.api.http) = {
+            post: "/v1/activities"
+            body: "*"
+        };
+    }
+
+    rpc GetActivity(GetActivityRequest) returns (GetActivityResponse) {
+        option (google.api.http) = {
+            get: "/v1/activities/{id}"
+        };
+    }
+
+    rpc ListActivities(ListActivitiesRequest) returns (ListActivitiesResponse) {
+        option (google.api.http) = {
+            get: "/v1/users/{user_id}/activities"
+        };
+    }
+
+    rpc GetStats(GetStatsRequest) returns (GetStatsResponse) {
+        option (google.api.http) = {
+            get: "/v1/users/{user_id}/activity_stats"
+        };
+    }
+}

@@ -1,0 +1,121 @@
+syntax = "proto3";
+
+package gym.v1alpha;
+
+import "google/type/datetime.proto";
+import "google/api/annotations.proto";
+
+message Gym {
+    int32 id = 1;
+    string name = 2;
+    string address = 3;
+    string phone = 4;
+    string email = 5;
+    int32 owner_id = 6;
+    google.type.DateTime created_at = 7;
+}
+
+message Membership {
+    int32 id = 1;
+    int32 user_id = 2;
+    int32 gym_id = 3;
+    string role = 4;
+    google.type.DateTime joined_at = 5;
+}
+
+message CreateGymRequest {
+    string name = 1;
+    string address = 2;
+    string phone = 3;
+    string email = 4;
+    int32 owner_id = 5;
+}
+
+message CreateGymResponse {
+    Gym gym = 1;
+}
+
+message GetGymRequest {
+    int32 id = 1;
+}
+
+message GetGymResponse {
+    Gym gym = 1;
+}
+
+message ListGymsRequest {}
+
+message ListGymsResponse {
+    repeated Gym gyms = 1;
+}
+
+message UpdateGymRequest {
+    int32 id = 1;
+    string name = 2;
+    string address = 3;
+    string phone = 4;
+    string email = 5;
+}
+
+message UpdateGymResponse {
+    Gym gym = 1;
+}
+
+message AddMemberRequest {
+    int32 gym_id = 1;
+    int32 user_id = 2;
+    string role = 3;
+}
+
+message AddMemberResponse {
+    Membership membership = 1;
+}
+
+message ListMembersRequest {
+    int32 gym_id = 1;
+}
+
+message ListMembersResponse {
+    repeated Membership members = 1;
+}
+
+service GymService {
+    rpc CreateGym(CreateGymRequest) returns (CreateGymResponse) {
+        option (google.api.http) = {
+            post: "/v1/gyms"
+            body: "*"
+        };
+    }
+
+    rpc GetGym(GetGymRequest) returns (GetGymResponse) {
+        option (google.api.http) = {
+            get: "/v1/gyms/{id}"
+        };
+    }
+
+    rpc ListGyms(ListGymsRequest) returns (ListGymsResponse) {
+        option (google.api.http) = {
+            get: "/v1/gyms"
+        };
+    }
+
+    rpc UpdateGym(UpdateGymRequest) returns (UpdateGymResponse) {
+        option (google.api.http) = {
+            put: "/v1/gyms/{id}"
+            body: "*"
+        };
+    }
+
+    rpc AddMember(AddMemberRequest) returns (AddMemberResponse) {
+        option (google.api.http) = {
+            post: "/v1/gyms/{gym_id}/members"
+            body: "*"
+        };
+    }
+
+    rpc ListMembers(ListMembersRequest) returns (ListMembersResponse) {
+        option (google.api.http) = {
+            get: "/v1/gyms/{gym_id}/members"
+        };
+    }
+}

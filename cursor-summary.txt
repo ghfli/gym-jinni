@@ -1,0 +1,49 @@
+Summary of work done on gym-jinni (last Cursor session: June 23, 2026)
+
+===========================================================================
+PRIOR SESSIONS (Jun 22 + Jun 23 morning)
+===========================================================================
+
+Built out all domain modules from scratch:
+
+  Phase 1A: JWT auth middleware
+  Phase 1B: Class module
+  Phase 1C: Booking module
+  Phase 1D: Flutter post-login UI
+  Phase 2:  Gym module + trainer profiles
+  Phase 3:  Scheduling / calendar
+  Phase 4:  Payments
+  Phase 5:  Notifications
+  Phase 6:  Activity tracking
+  Phase 7:  Reports + admin
+
+===========================================================================
+LAST SESSION (Jun 23, 2026 afternoon — session c3f1d615)
+===========================================================================
+
+1. Implemented missing user/user.go methods
+   - GetUser    — looks up a user by ID, returns full profile
+   - UpdateUser — updates email, phone, name, and optionally re-hashes password
+   - DeleteUser — deletes a user after confirming existence
+   - LogoutUser — calls BlockSession SQL query to invalidate the JWT session
+
+2. Upgraded cmd/grpcclt.go
+   Rewrote the gRPC integration test client to cover the full auth flow
+   end-to-end:
+     CreateUser → LoginUser → GetUser → UpdateUser → RenewAccessToken
+     → ListRoles (with JWT) → CreateGym → CreateClass → CreateBooking
+     → LogActivity → GetStats → LogoutUser
+
+3. Extended cmd/httpclt.sh
+   Added HTTP gateway test coverage for the new modules:
+   gym, booking, activity, and report endpoints.
+
+===========================================================================
+END STATE
+===========================================================================
+
+  - Service compiles cleanly
+  - Flutter analyzes without errors
+  - All domain modules (user, class, rbac, booking, gym, schedule, payment,
+    notification, activity, report) are wired into service.go
+  - Migrations run from 000001 through 000011

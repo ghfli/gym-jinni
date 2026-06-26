@@ -1,0 +1,10 @@
+version: 2
+sql:
+  - schema: "../../schema/payment.sql"
+    queries: "payment.sqlc.sql"
+    engine: "postgresql"
+    gen:
+      go:
+        package: "paymentv1alpha"
+        out: "../../gen/go/payment/v1alpha"
+        sql_package: "database/sql"

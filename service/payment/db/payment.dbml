@@ -1,0 +1,17 @@
+Project gymjinni_payment {
+  database_type: 'PostgreSQL'
+  Note: 'gymjinni payment management database schema'
+}
+
+Table payment.payment {
+  id serial [pk]
+  user_id int [not null, ref: > user.user.id]
+  gym_id int
+  amount int [not null]
+  currency varchar [not null, default: 'usd']
+  status varchar [not null, default: 'pending']
+  provider varchar [default: 'stripe']
+  provider_ref varchar
+  payment_type varchar [not null]
+  created_at timestamptz [not null, default: `now()`]
+}

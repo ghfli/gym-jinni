@@ -1,0 +1,13 @@
+Project gymjinni_booking {
+  database_type: 'PostgreSQL'
+  Note: 'gymjinni booking management database schema'
+}
+
+Table booking.booking {
+  id serial [pk]
+  user_id int [not null, ref: > user.user.id]
+  class_id int [not null, ref: > class.class.id]
+  status varchar [not null, default: 'confirmed']
+  booked_at timestamptz [not null, default: `now()`]
+  cancelled_at timestamptz
+}
