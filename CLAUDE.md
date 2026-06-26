@@ -13,7 +13,7 @@ Three top-level areas:
 
 ## Backend architecture (`service/`)
 
-The backend is one Go module (`github.com/ghfli/gym-jinni/service`) built into one binary, but organized into **per-domain modules**: `user/`, `class/`, `rbac/`. Each module follows the same layout and toolchain — this is the single most important pattern to understand before adding features.
+The backend is one Go module (`github.com/ghfli/gym-jinni/service`) built into one binary, but organized into **per-domain modules**: `user`, `class`, `rbac`, `booking`, `gym`, `schedule`, `payment`, `notification`, `activity`, `report`. Each module follows the same layout and toolchain — this is the single most important pattern to understand before adding features.
 
 For a module `$MOD` (e.g. `user`):
 - `$MOD/pb/` — Protobuf definitions + that module's `buf.yaml`. The actual `.proto` files live one level deeper (e.g. `user/pb/user/...`).
@@ -26,15 +26,17 @@ Two codegen pipelines:
 - **buf** turns `.proto` into Go gRPC + grpc-gateway + go-proto-validators code. Workspace is `service/buf.work.yaml`; output config is `service/buf.gen.yaml`. Validators come from the `validator/pb` module imported by other protos.
 - **sqlc** turns committed `schema/*.sql` + `$MOD/db/$MOD.sqlc.sql` into typed Go DB code. The schema files in `service/schema/` are the sqlc *source of truth* and are committed; they are regenerated from DBML via `make dbsch` (needs `dbml2sql`, optional).
 
-`service.go` wires everything: `runGRPCServer()` registers each module's server and chains gRPC middleware (currently `grpc_validator`); `runGatewayServer()` exposes the HTTP/JSON gateway. New modules get registered here.
+`service.go` wires everything: `runGRPCServer()` registers each module's server and chains gRPC middleware (`grpc_validator` then `AuthInterceptor`); `runGatewayServer()` exposes the HTTP/JSON gateway. New modules must be registered in both functions. The gateway wraps all routes with `withCORS()` which allows `*` origin and the `Grpc-Metadata-user-id` header.
 
-### RBAC
+### Auth & RBAC
 
-RBAC lives in `service/rbac/` (a normal module) plus `service/middleware/` (`auth.go`, `permissions.go`). `middleware/permissions.go` maps gRPC method names → required permission names; `AuthInterceptor(rbacClient)` enforces them but is **not yet wired into `service.go`** — enable it once stable auth metadata exists. See `service/RBAC.md`. Note: an older `.cursor/plans/` doc proposed a standalone `csr_service/` directory — that was **not** the chosen design; RBAC is part of the `service` module.
+`service/auth/` provides JWT token generation and validation (`token.go`) and config (`config.go`). Access tokens expire in 15 min, refresh tokens in 7 days; roles are embedded in JWT claims. The secret is read from `JWT_SECRET` env var (default: `gym-jinni-dev-secret-change-in-prod`).
+
+RBAC lives in `service/rbac/` (a normal module) plus `service/middleware/` (`auth.go`, `permissions.go`). `middleware/permissions.go` maps gRPC method paths → required permission names and maintains the public-method allowlist (LoginUser, CreateUser, RenewAccessToken). `AuthInterceptor(rbacClient)` is **already wired** in `service.go` as the second interceptor — it extracts `user_id` from the JWT via the `authorization` or `grpcgateway-authorization` metadata header and calls `rbacClient.CheckPermission()`. See `service/RBAC.md`. Note: an older `.cursor/plans/` doc proposed a standalone `csr_service/` directory — that was **not** the chosen design; RBAC is part of the `service` module.
 
 ### Database & migrations
 
-PostgreSQL, one database `gj` with a schema per domain (`user`, `class`, `rbac`). Migrations are golang-migrate files in `service/mig/` (`NNNNNN_name.up.sql` / `.down.sql`), applied in numeric order. The `SVCS` variable in the Makefile (`user class rbac`) drives which modules sqlc/dbml loop over — add new modules there.
+PostgreSQL, one database `gj` with a schema per domain. Migrations are golang-migrate files in `service/mig/` (`NNNNNN_name.up.sql` / `.down.sql`), applied in numeric order. The `SVCS` variable in the Makefile (currently all modules except `report`) drives which modules sqlc/dbml loop over — add new modules there. Note: the Dockerfile also only runs sqlc for the modules it has schema SQL for; if you add a module to `SVCS`, update the Dockerfile too.
 
 ## Common commands (run from `service/`)
 
@@ -46,11 +48,15 @@ make service          # = bufgen + dbsql + go mod tidy + go build
 make bufgen           # protobuf -> gen/go (gRPC, gateway, validators)
 make dbsql            # sqlc -> gen/go (per module in $SVCS)
 make buflint          # lint protos
+make bufmcc           # clear buf module cache (use when buf resolves stale deps)
+make clean            # remove built binaries and gen/ directory
 
 # Local Postgres lifecycle (Docker)
 make setup            # create postgres:alpine container, create db gj, migrate up
-make migup / migdn    # apply / roll back all migrations (needs DBURL)
+make migup / migdn    # apply / roll back all migrations
 make migup1 / migdn1  # one step
+make migvn            # show current migration version
+make migfr            # force-set migration version (use after manual fix)
 make dbps             # psql into gj
 make teardn           # migrate down + drop db + remove container
 
@@ -60,7 +66,9 @@ make test             # build all, start postgres, run cmd/service, then cmd/grp
 
 There is **no Go unit-test suite**; `make test` is an end-to-end check that boots the server and drives it with a gRPC client (`cmd/grpcclt.go`) and a curl script (`cmd/httpclt.sh`). To test one thing, edit those clients or hit the HTTP gateway directly.
 
-Requires on PATH: `buf`, `sqlc`, `migrate`, and protoc plugins (`protoc-gen-go`, `protoc-gen-go-grpc`, `protoc-gen-grpc-gateway`, `protoc-gen-govalidators`). `DBURL` defaults to `postgresql://root:gj@127.0.0.1:5432/gj?sslmode=disable&search_path=public`.
+Requires on PATH: `buf`, `sqlc`, `migrate`, and protoc plugins (`protoc-gen-go`, `protoc-gen-go-grpc`, `protoc-gen-grpc-gateway`, `protoc-gen-govalidators`). `DBURL` defaults to `postgresql://root:gj@127.0.0.1:5432/gj?sslmode=disable&search_path=public`. `JWT_SECRET` defaults to `gym-jinni-dev-secret-change-in-prod`.
+
+Note: `buf dep update` is intentionally a no-op (`bufmup`) because per-module update fails when protos import sibling workspace modules. BSR deps stay pinned in `buf.lock`.
 
 ## Frontend (`ui/`)
 
