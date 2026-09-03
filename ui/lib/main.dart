@@ -621,7 +621,7 @@ class ProfilePage extends StatelessWidget {
             radius: 48,
             backgroundColor: theme.colorScheme.primaryContainer,
             child: Text(
-              (auth.userName ?? '?')[0].toUpperCase(),
+              (auth.userName?.isNotEmpty == true ? auth.userName! : '?')[0].toUpperCase(),
               style: theme.textTheme.headlineLarge?.copyWith(color: theme.colorScheme.onPrimaryContainer),
             ),
           ),
@@ -732,12 +732,13 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
       if (!mounted) return;
       if (resp.statusCode < 300) {
         final map = jsonDecode(resp.body) as Map<String, dynamic>;
+        final userMap = map['user'] is Map ? map['user'] as Map<String, dynamic> : null;
         final auth = context.read<AuthState>();
         auth.login(
-          accessToken: (map['access_tkn'] ?? map['accessTkn'] ?? '') as String,
-          refreshToken: (map['refresh_tkn'] ?? map['refreshTkn'] ?? '') as String,
-          userId: (map['user']?['id'] ?? 0) as int,
-          userName: (map['user']?['name'] ?? '') as String,
+          accessToken: (map['access_tkn'] ?? map['accessTkn'] ?? '').toString(),
+          refreshToken: (map['refresh_tkn'] ?? map['refreshTkn'] ?? '').toString(),
+          userId: int.tryParse(userMap?['id']?.toString() ?? '0') ?? 0,
+          userName: (userMap?['name'] ?? '').toString(),
         );
       } else {
         setState(() => _message = 'Error ${resp.statusCode}: ${resp.body}');
@@ -815,3 +816,4 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
     ]);
   }
 }
+// invalidator

@@ -1,0 +1,35 @@
+---
+- name: Ensure container build directory exists
+  file:
+    path: "{{ playbook_dir }}/../container"
+    state: directory
+    mode: '0755'
+
+- name: Build UI container image
+  shell: |
+    cd {{ playbook_dir }}/../../
+    sudo docker build -f k8s-setup/container/Dockerfile.ui -t gym-jinni/ui:latest .
+  args:
+    chdir: "{{ playbook_dir }}/../../"
+  register: build_ui
+  changed_when: >-
+    'Successfully tagged' in (build_ui.stdout | default('') ~ build_ui.stderr | default(''))
+    or 'successfully tagged' in (build_ui.stdout | default('') ~ build_ui.stderr | default('')) | lower
+
+- name: Import UI image into k3d cluster
+  shell: sudo -E k3d image import gym-jinni/ui:latest -c gym-jinni
+  environment:
+    DOCKER_HOST: "{{ k3d_docker_host }}"
+  register: import_result
+  changed_when: import_result.rc == 0
+
+- name: Display UI build status
+  debug:
+    msg: "UI container image built and imported to k3d cluster"
+
+- name: Restart UI deployment to pick up new image
+  shell: |
+    export KUBECONFIG="{{ ansible_env.HOME }}/.kube/gym-jinni-config"
+    kubectl rollout restart deployment ui -n gym-jinni || true
+  register: rollout_result
+  changed_when: "'restarted' in rollout_result.stdout"

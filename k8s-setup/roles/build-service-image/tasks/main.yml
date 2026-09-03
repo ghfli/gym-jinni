@@ -16,27 +16,20 @@
     'Successfully tagged' in (build_service.stdout | default('') ~ build_service.stderr | default(''))
     or 'successfully tagged' in (build_service.stdout | default('') ~ build_service.stderr | default('')) | lower
 
-- name: Build UI container image
-  shell: |
-    cd {{ playbook_dir }}/../../
-    sudo docker build -f k8s-setup/container/Dockerfile.ui -t gym-jinni/ui:latest .
-  args:
-    chdir: "{{ playbook_dir }}/../../"
-  register: build_ui
-  changed_when: >-
-    'Successfully tagged' in (build_ui.stdout | default('') ~ build_ui.stderr | default(''))
-    or 'successfully tagged' in (build_ui.stdout | default('') ~ build_ui.stderr | default('')) | lower
-
-- name: Import images into k3d cluster
-  shell: sudo -E k3d image import {{ item }} -c gym-jinni
+- name: Import service image into k3d cluster
+  shell: sudo -E k3d image import gym-jinni/service:latest -c gym-jinni
   environment:
     DOCKER_HOST: "{{ k3d_docker_host }}"
-  loop:
-    - gym-jinni/service:latest
-    - gym-jinni/ui:latest
   register: import_result
   changed_when: import_result.rc == 0
 
-- name: Display build status
+- name: Display service build status
   debug:
-    msg: "All container images built and imported to k3d cluster"
+    msg: "Main service container image built and imported to k3d cluster"
+
+- name: Restart main-service deployment to pick up new image
+  shell: |
+    export KUBECONFIG="{{ ansible_env.HOME }}/.kube/gym-jinni-config"
+    kubectl rollout restart deployment main-service -n gym-jinni || true
+  register: rollout_result
+  changed_when: "'restarted' in rollout_result.stdout"

@@ -151,7 +151,8 @@ k8s-setup/
 │   └── deploy-services.yml     # Build + deploy services
 ├── roles/
 │   ├── k3d/                    # Install k3d and create cluster
-│   ├── build-images/           # Build container images (Podman)
+│   ├── build-ui-image/         # Build UI container image (Podman)
+│   ├── build-service-image/    # Build service container image (Podman)
 │   └── gym-jinni/              # Deploy to K8s
 ├── manifests/
 │   ├── namespace.yml

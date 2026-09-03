@@ -57,7 +57,8 @@ Moved to `archive/` directory:
 
 These continue to work as-is:
 - `playbooks/deploy-services.yml` - Service deployment
-- `roles/build-images/` - Podman image build + k3d import
+- `roles/build-ui-image/` - Podman image build + k3d import for UI
+- `roles/build-service-image/` - Podman image build + k3d import for backend service
 - `roles/gym-jinni/` - Kubernetes manifests deployment
 - `manifests/*.yml` - All Kubernetes manifests
 - `container/Dockerfile.*` - Service and UI image definitions

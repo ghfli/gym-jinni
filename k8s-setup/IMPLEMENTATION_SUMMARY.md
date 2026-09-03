@@ -18,7 +18,8 @@ This document summarizes the complete implementation of a Kubernetes test enviro
 
 **Roles:**
 - `roles/k3d/` - Installs k3d and creates cluster
-- `roles/build-images/` - Builds container images with Podman and imports into k3d
+- `roles/build-ui-image/` - Builds UI container image with Podman and imports into k3d
+- `roles/build-service-image/` - Builds backend service container image with Podman and imports into k3d
 - `roles/gym-jinni/` - Deploys services to Kubernetes
 
 **Archived (Old Implementation):**
