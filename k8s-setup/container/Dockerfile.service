@@ -25,9 +25,7 @@ WORKDIR /build/service
 # each module in isolation and fail on workspace imports (e.g. user → validator).
 # buf.build pins live in committed buf.lock; `buf generate` uses buf.work.yaml and succeeds.
 RUN buf generate
-RUN (cd user/db && sqlc generate) && \
-    (cd class/db && sqlc generate) && \
-    (cd rbac/db && sqlc generate)
+RUN for s in user class rbac booking gym schedule payment notification activity; do (cd $s/db && sqlc generate); done
 
 RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o /out/service .
 

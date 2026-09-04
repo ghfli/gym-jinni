@@ -5,9 +5,11 @@ import (
 	"database/sql"
 	"log"
 	"os"
+	"time"
 
 	. "github.com/ghfli/gym-jinni/service/gen/go/gym/v1alpha"
 	_ "github.com/jackc/pgx/v4/stdlib"
+	"google.golang.org/genproto/googleapis/type/datetime"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -30,6 +32,32 @@ func NewImGymServiceServer() (*ImGymServiceServer, error) {
 		db: db,
 		q:  New(db),
 	}, nil
+}
+
+func NullStringToString(ns sql.NullString) string {
+	if !ns.Valid {
+		return ""
+	}
+	return ns.String
+}
+
+func NullInt32ToInt32(ni sql.NullInt32) int32 {
+	if !ni.Valid {
+		return 0
+	}
+	return ni.Int32
+}
+
+func TimeToDateTime(t time.Time) *datetime.DateTime {
+	return &datetime.DateTime{
+		Year:    int32(t.Year()),
+		Month:   int32(t.Month()),
+		Day:     int32(t.Day()),
+		Hours:   int32(t.Hour()),
+		Minutes: int32(t.Minute()),
+		Seconds: int32(t.Second()),
+		Nanos:   int32(t.Nanosecond()),
+	}
 }
 
 func gymToProto(g GymGym) *Gym {

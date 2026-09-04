@@ -51,7 +51,7 @@ func run() error {
 
 var (
 	grpcServerEndpoint = flag.String("grpc-server-endpoint",
-		"127.0.0.1:8080", "gRPC server endpoint")
+		"0.0.0.0:8080", "gRPC server endpoint")
 	gatewayAddr = flag.String("gateway-addr",
 		":8081", "HTTP gateway listen address")
 )
@@ -180,9 +180,6 @@ func runGatewayServer() error {
 		return err
 	}
 	if err := reportv1alpha.RegisterReportServiceHandlerFromEndpoint(ctx, mux, *grpcServerEndpoint, opts); err != nil {
-		return err
-	}
-	if err := userv1alpha.RegisterTrainerProfileGatewayHandlers(ctx, mux, *grpcServerEndpoint, opts); err != nil {
 		return err
 	}
 

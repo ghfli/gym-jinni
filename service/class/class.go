@@ -59,13 +59,13 @@ func dateTimeToTime(dt *datetime.DateTime) time.Time {
 
 func classToProto(c ClassClass) *Class {
 	return &Class{
-		Id:          uint32(c.ID),
-		CreatedBy:   uint32(c.CreatedBy.Int32),
+		Id:          int32(c.ID),
+		CreatedBy:   int32(c.CreatedBy.Int32),
 		StartTime:   timeToDateTime(c.StartTime),
 		EndTime:     timeToDateTime(c.EndTime),
 		Description: c.Description,
-		MinHdcnt:    uint32(c.MinHdcnt.Int32),
-		MaxHdcnt:    uint32(c.MaxHdcnt.Int32),
+		MinHdcnt:    int32(c.MinHdcnt.Int32),
+		MaxHdcnt:    int32(c.MaxHdcnt.Int32),
 	}
 }
 

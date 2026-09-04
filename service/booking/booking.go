@@ -5,10 +5,12 @@ import (
 	"database/sql"
 	"log"
 	"os"
+	"time"
 
 	. "github.com/ghfli/gym-jinni/service/gen/go/booking/v1alpha"
 	classdb "github.com/ghfli/gym-jinni/service/gen/go/class/v1alpha"
 	_ "github.com/jackc/pgx/v4/stdlib"
+	"google.golang.org/genproto/googleapis/type/datetime"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -33,6 +35,40 @@ func NewImBookingServiceServer() (*ImBookingServiceServer, error) {
 		q:      New(db),
 		classQ: classdb.New(db),
 	}, nil
+}
+
+func StatusFromString(s string) BookingStatus {
+	switch s {
+	case "confirmed":
+		return BookingStatus_BOOKING_STATUS_CONFIRMED
+	case "cancelled":
+		return BookingStatus_BOOKING_STATUS_CANCELLED
+	case "completed":
+		return BookingStatus_BOOKING_STATUS_COMPLETED
+	case "no_show":
+		return BookingStatus_BOOKING_STATUS_NO_SHOW
+	default:
+		return BookingStatus_BOOKING_STATUS_UNSPECIFIED
+	}
+}
+
+func TimeToDateTime(t time.Time) *datetime.DateTime {
+	return &datetime.DateTime{
+		Year:    int32(t.Year()),
+		Month:   int32(t.Month()),
+		Day:     int32(t.Day()),
+		Hours:   int32(t.Hour()),
+		Minutes: int32(t.Minute()),
+		Seconds: int32(t.Second()),
+		Nanos:   int32(t.Nanosecond()),
+	}
+}
+
+func NullTimeToDateTime(nt sql.NullTime) *datetime.DateTime {
+	if !nt.Valid {
+		return nil
+	}
+	return TimeToDateTime(nt.Time)
 }
 
 func bookingToProto(b BookingBooking) *Booking {

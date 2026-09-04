@@ -9,6 +9,7 @@ import (
 
 	. "github.com/ghfli/gym-jinni/service/gen/go/schedule/v1alpha"
 	_ "github.com/jackc/pgx/v4/stdlib"
+	"google.golang.org/genproto/googleapis/type/datetime"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -33,7 +34,7 @@ func NewImScheduleServiceServer() (*ImScheduleServiceServer, error) {
 	}, nil
 }
 
-func dateTimeToTime(dt *DateTime) time.Time {
+func dateTimeToTime(dt *datetime.DateTime) time.Time {
 	if dt == nil {
 		return time.Time{}
 	}
@@ -41,18 +42,11 @@ func dateTimeToTime(dt *DateTime) time.Time {
 		int(dt.Hours), int(dt.Minutes), int(dt.Seconds), 0, time.UTC)
 }
 
-func dateTimeToNullTime(dt *DateTime) sql.NullTime {
+func dateTimeToNullTime(dt *datetime.DateTime) sql.NullTime {
 	if dt == nil {
 		return sql.NullTime{}
 	}
 	return sql.NullTime{Time: dateTimeToTime(dt), Valid: true}
-}
-
-func ptrToNullInt32(p *int32) sql.NullInt32 {
-	if p == nil {
-		return sql.NullInt32{}
-	}
-	return sql.NullInt32{Int32: *p, Valid: true}
 }
 
 func strToNullString(s string) sql.NullString {
@@ -62,12 +56,31 @@ func strToNullString(s string) sql.NullString {
 	return sql.NullString{String: s, Valid: true}
 }
 
+func TimeToDateTime(t time.Time) *datetime.DateTime {
+	return &datetime.DateTime{
+		Year:    int32(t.Year()),
+		Month:   int32(t.Month()),
+		Day:     int32(t.Day()),
+		Hours:   int32(t.Hour()),
+		Minutes: int32(t.Minute()),
+		Seconds: int32(t.Second()),
+		Nanos:   int32(t.Nanosecond()),
+	}
+}
+
+func NullTimeToDateTime(nt sql.NullTime) *datetime.DateTime {
+	if !nt.Valid {
+		return nil
+	}
+	return TimeToDateTime(nt.Time)
+}
+
 func scheduleToProto(s ScheduleSchedule) *Schedule {
 	return &Schedule{
 		Id:             s.ID,
-		GymId:          NullInt32ToPtr(s.GymID),
-		TrainerId:      NullInt32ToPtr(s.TrainerID),
-		ClassId:        NullInt32ToPtr(s.ClassID),
+		GymId:          s.GymID.Int32,
+		TrainerId:      s.TrainerID.Int32,
+		ClassId:        s.ClassID.Int32,
 		RecurrenceRule: s.RecurrenceRule.String,
 		StartDate:      TimeToDateTime(s.StartDate),
 		EndDate:        NullTimeToDateTime(s.EndDate),
@@ -83,9 +96,9 @@ func (s *ImScheduleServiceServer) CreateSchedule(ctx context.Context, req *Creat
 	}
 
 	row, err := s.q.CreateSchedule(ctx, CreateScheduleParams{
-		GymID:          ptrToNullInt32(req.GetGymId()),
-		TrainerID:      ptrToNullInt32(req.GetTrainerId()),
-		ClassID:        ptrToNullInt32(req.GetClassId()),
+		GymID:          sql.NullInt32{Int32: req.GetGymId(), Valid: req.GetGymId() != 0},
+		TrainerID:      sql.NullInt32{Int32: req.GetTrainerId(), Valid: req.GetTrainerId() != 0},
+		ClassID:        sql.NullInt32{Int32: req.GetClassId(), Valid: req.GetClassId() != 0},
 		RecurrenceRule: strToNullString(req.GetRecurrenceRule()),
 		StartDate:      dateTimeToTime(req.GetStartDate()),
 		EndDate:        dateTimeToNullTime(req.GetEndDate()),

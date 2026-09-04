@@ -68,15 +68,13 @@ spec:
               name: gym-jinni-config
               key: DBURL
         livenessProbe:
-          httpGet:
-            path: /v1/roles
-            port: 8081
+          tcpSocket:
+            port: 8080
           initialDelaySeconds: 30
           periodSeconds: 10
         readinessProbe:
-          httpGet:
-            path: /v1/roles
-            port: 8081
+          tcpSocket:
+            port: 8080
           initialDelaySeconds: 10
           periodSeconds: 5
         resources:
