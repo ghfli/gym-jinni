@@ -14,6 +14,7 @@ class AuthState extends ChangeNotifier {
 
   Map<String, String> get authHeaders => {
         if (_accessToken != null) 'Authorization': 'Bearer $_accessToken',
+        if (_accessToken != null) 'Grpc-Metadata-authorization': 'Bearer $_accessToken',
       };
 
   void login({

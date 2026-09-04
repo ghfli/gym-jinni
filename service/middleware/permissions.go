@@ -100,6 +100,8 @@ var PermissionMapping = map[string]string{
 	"/rbac.v1alpha.RBACService/CheckPermission":                  "", // Authenticated users can check their own permissions
 	"/rbac.v1alpha.RBACService/CheckPermissionByResourceAction":  "", // Authenticated users can check their own permissions
 	"/rbac.v1alpha.RBACService/GetUserPermissions":               "", // Authenticated users can get their own permissions
+	
+	// Internal methods that can be called by other services without auth
 }
 
 // PublicMethods lists methods that don't require authentication
@@ -107,6 +109,8 @@ var PublicMethods = map[string]bool{
 	"/user.v1alpha.UserService/LoginUser":         true,
 	"/user.v1alpha.UserService/CreateUser":         true,
 	"/user.v1alpha.UserService/RenewAccessToken":   true,
+	"/rbac.v1alpha.RBACService/GetRoleByName":      true,
+	"/rbac.v1alpha.RBACService/AssignRoleToUser":   true,
 }
 
 // IsPublicMethod checks if a method is public

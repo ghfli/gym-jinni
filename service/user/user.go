@@ -19,12 +19,18 @@ import (
 	"google.golang.org/genproto/googleapis/type/datetime"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	rbacv1alpha "github.com/ghfli/gym-jinni/service/gen/go/rbac/v1alpha"
 )
 
 type ImUserServiceServer struct {
 	UnimplementedUserServiceServer
-	db *sql.DB
-	q  *Queries
+	db         *sql.DB
+	q          *Queries
+	rbacClient rbacv1alpha.RBACServiceClient
+}
+
+func (s *ImUserServiceServer) SetRBACClient(client rbacv1alpha.RBACServiceClient) {
+	s.rbacClient = client
 }
 
 func NewImUserServiceServer() (*ImUserServiceServer, error) {
@@ -88,6 +94,25 @@ func (s *ImUserServiceServer) CreateUser(ctx context.Context,
 	if err != nil {
 		log.Println("Failed to CreateUser:", err)
 		return &res, err
+	}
+
+	// Also assign the default 'customer' role so they can book classes
+	if s.rbacClient != nil {
+		// First get the customer role ID
+		roleResp, err := s.rbacClient.GetRoleByName(ctx, &rbacv1alpha.GetRoleByNameRequest{Name: "customer"})
+		if err == nil && roleResp.Role != nil {
+			_, err = s.rbacClient.AssignRoleToUser(ctx, &rbacv1alpha.AssignRoleToUserRequest{
+				UserId: userUser.ID,
+				RoleId: roleResp.Role.Id,
+			})
+			if err != nil {
+				log.Printf("Warning: failed to assign customer role to new user %d: %v", userUser.ID, err)
+			}
+		} else {
+			log.Printf("Warning: failed to find customer role: %v", err)
+		}
+	} else {
+		log.Println("Warning: rbacClient not set, cannot assign customer role")
 	}
 
 	log.Println("Responding with", userUser)

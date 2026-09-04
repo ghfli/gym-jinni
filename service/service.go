@@ -34,6 +34,7 @@ import (
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
 )
 
 func main() {
@@ -72,6 +73,38 @@ func runGRPCServer() error {
 	if err != nil {
 		return fmt.Errorf("failed to create RBAC service server: %w", err)
 	}
+
+	// Loopback client for RBAC permission checks in the auth interceptor and user service
+	rbacConn, err := grpc.Dial("127.0.0.1:8080",
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithUnaryInterceptor(func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+			// Extract authorization from incoming context
+			md, ok := metadata.FromIncomingContext(ctx)
+			if ok {
+				// Create outgoing context with the same authorization
+				outMd := metadata.MD{}
+				for _, key := range []string{"authorization", "grpcgateway-authorization", "grpc-metadata-authorization"} {
+					if vals := md.Get(key); len(vals) > 0 {
+						outMd.Set(key, vals...)
+					}
+				}
+				ctx = metadata.NewOutgoingContext(ctx, outMd)
+			}
+			return invoker(ctx, method, req, reply, cc, opts...)
+		}))
+	if err != nil {
+		log.Printf("Warning: could not create RBAC loopback client: %v", err)
+	}
+	// Create a second loopback client without interceptors for internal service calls
+	internalRbacConn, err := grpc.Dial("127.0.0.1:8080",
+		grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		log.Printf("Warning: could not create internal RBAC loopback client: %v", err)
+	}
+
+	rbacClient := rbacv1alpha.NewRBACServiceClient(rbacConn)
+	internalRbacClient := rbacv1alpha.NewRBACServiceClient(internalRbacConn)
+	usersvc.SetRBACClient(internalRbacClient)
 
 	classsvc, err := class.NewImClassServiceServer()
 	if err != nil {
@@ -113,13 +146,7 @@ func runGRPCServer() error {
 		return fmt.Errorf("failed to create report service server: %w", err)
 	}
 
-	// Loopback client for RBAC permission checks in the auth interceptor
-	rbacConn, err := grpc.Dial(*grpcServerEndpoint,
-		grpc.WithTransportCredentials(insecure.NewCredentials()))
-	if err != nil {
-		log.Printf("Warning: could not create RBAC loopback client: %v", err)
-	}
-	rbacClient := rbacv1alpha.NewRBACServiceClient(rbacConn)
+	// Loopback client for RBAC permission checks in the auth interceptor and user service
 
 	server := grpc.NewServer(
 		grpc.UnaryInterceptor(grpc_middleware.ChainUnaryServer(
@@ -152,34 +179,38 @@ func runGatewayServer() error {
 
 	mux := runtime.NewServeMux()
 	opts := []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())}
-	if err := userv1alpha.RegisterUserServiceHandlerFromEndpoint(ctx, mux, *grpcServerEndpoint, opts); err != nil {
+	
+	// Use 127.0.0.1 for loopback connections since 0.0.0.0 might not work for Dial in all environments
+	loopbackEndpoint := "127.0.0.1:8080"
+	
+	if err := userv1alpha.RegisterUserServiceHandlerFromEndpoint(ctx, mux, loopbackEndpoint, opts); err != nil {
 		return err
 	}
-	if err := rbacv1alpha.RegisterRBACServiceHandlerFromEndpoint(ctx, mux, *grpcServerEndpoint, opts); err != nil {
+	if err := rbacv1alpha.RegisterRBACServiceHandlerFromEndpoint(ctx, mux, loopbackEndpoint, opts); err != nil {
 		return err
 	}
-	if err := classv1alpha.RegisterClassServiceHandlerFromEndpoint(ctx, mux, *grpcServerEndpoint, opts); err != nil {
+	if err := classv1alpha.RegisterClassServiceHandlerFromEndpoint(ctx, mux, loopbackEndpoint, opts); err != nil {
 		return err
 	}
-	if err := bookingv1alpha.RegisterBookingServiceHandlerFromEndpoint(ctx, mux, *grpcServerEndpoint, opts); err != nil {
+	if err := bookingv1alpha.RegisterBookingServiceHandlerFromEndpoint(ctx, mux, loopbackEndpoint, opts); err != nil {
 		return err
 	}
-	if err := gymv1alpha.RegisterGymServiceHandlerFromEndpoint(ctx, mux, *grpcServerEndpoint, opts); err != nil {
+	if err := gymv1alpha.RegisterGymServiceHandlerFromEndpoint(ctx, mux, loopbackEndpoint, opts); err != nil {
 		return err
 	}
-	if err := schedulev1alpha.RegisterScheduleServiceHandlerFromEndpoint(ctx, mux, *grpcServerEndpoint, opts); err != nil {
+	if err := schedulev1alpha.RegisterScheduleServiceHandlerFromEndpoint(ctx, mux, loopbackEndpoint, opts); err != nil {
 		return err
 	}
-	if err := paymentv1alpha.RegisterPaymentServiceHandlerFromEndpoint(ctx, mux, *grpcServerEndpoint, opts); err != nil {
+	if err := paymentv1alpha.RegisterPaymentServiceHandlerFromEndpoint(ctx, mux, loopbackEndpoint, opts); err != nil {
 		return err
 	}
-	if err := notificationv1alpha.RegisterNotificationServiceHandlerFromEndpoint(ctx, mux, *grpcServerEndpoint, opts); err != nil {
+	if err := notificationv1alpha.RegisterNotificationServiceHandlerFromEndpoint(ctx, mux, loopbackEndpoint, opts); err != nil {
 		return err
 	}
-	if err := activityv1alpha.RegisterActivityServiceHandlerFromEndpoint(ctx, mux, *grpcServerEndpoint, opts); err != nil {
+	if err := activityv1alpha.RegisterActivityServiceHandlerFromEndpoint(ctx, mux, loopbackEndpoint, opts); err != nil {
 		return err
 	}
-	if err := reportv1alpha.RegisterReportServiceHandlerFromEndpoint(ctx, mux, *grpcServerEndpoint, opts); err != nil {
+	if err := reportv1alpha.RegisterReportServiceHandlerFromEndpoint(ctx, mux, loopbackEndpoint, opts); err != nil {
 		return err
 	}
 
@@ -192,7 +223,7 @@ func withCORS(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, PATCH, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Accept, Authorization, Grpc-Metadata-user-id")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Accept, Authorization, Grpc-Metadata-authorization, Grpc-Metadata-user-id")
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
 			return

@@ -66,7 +66,7 @@ func extractUserIDFromJWT(ctx context.Context) (int32, error) {
 	// grpc-gateway maps HTTP "Authorization" header to "authorization" metadata key
 	// Also accept "grpcgateway-authorization" for direct gRPC calls
 	var tokenStr string
-	for _, key := range []string{"authorization", "grpcgateway-authorization"} {
+	for _, key := range []string{"authorization", "grpcgateway-authorization", "grpc-metadata-authorization"} {
 		vals := md.Get(key)
 		if len(vals) > 0 {
 			tokenStr = vals[0]
