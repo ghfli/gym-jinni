@@ -192,6 +192,8 @@ class _ClassListPageState extends State<ClassListPage> {
       if (resp.statusCode < 300) {
         final data = jsonDecode(resp.body) as Map<String, dynamic>;
         setState(() { _classes = (data['classes'] as List?) ?? []; _loading = false; });
+      } else if (resp.statusCode == 403) {
+        setState(() { _classes = []; _loading = false; });
       } else {
         setState(() { _error = 'Error ${resp.statusCode}: ${resp.body}'; _loading = false; });
       }
@@ -321,6 +323,8 @@ class _MyBookingsPageState extends State<MyBookingsPage> {
       if (resp.statusCode < 300) {
         final data = jsonDecode(resp.body) as Map<String, dynamic>;
         setState(() { _bookings = (data['bookings'] as List?) ?? []; _loading = false; });
+      } else if (resp.statusCode == 403) {
+        setState(() { _bookings = []; _loading = false; });
       } else {
         setState(() { _error = 'Error ${resp.statusCode}'; _loading = false; });
       }
