@@ -2,6 +2,8 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+See `AGENTS.md` for style, testing, and commit/PR conventions, and `spec.md` for per-module status and requirements.
+
 ## What this is
 
 Gym-Jinni is a gym-management platform (think Vagaro / GymMaster / Strava). It uses a **modular monolith** backend in Go and a Flutter frontend, deployed to Kubernetes (k3d locally) via Podman-built container images.
@@ -66,7 +68,7 @@ make test             # build all, start postgres, run cmd/service, then cmd/grp
 
 There is **no Go unit-test suite**; `make test` is an end-to-end check that boots the server and drives it with a gRPC client (`cmd/grpcclt.go`) and a curl script (`cmd/httpclt.sh`). To test one thing, edit those clients or hit the HTTP gateway directly.
 
-Requires on PATH: `buf`, `sqlc`, `migrate`, and protoc plugins (`protoc-gen-go`, `protoc-gen-go-grpc`, `protoc-gen-grpc-gateway`, `protoc-gen-govalidators`). `DBURL` defaults to `postgresql://root:gj@127.0.0.1:5432/gj?sslmode=disable&search_path=public`. `JWT_SECRET` defaults to `gym-jinni-dev-secret-change-in-prod`.
+Docker targets in the Makefile use `sudo`. Requires on PATH: `buf`, `sqlc`, `migrate`, and protoc plugins (`protoc-gen-go`, `protoc-gen-go-grpc`, `protoc-gen-grpc-gateway`, `protoc-gen-govalidators`). `DBURL` defaults to `postgresql://root:gj@127.0.0.1:5432/gj?sslmode=disable&search_path=public`. `JWT_SECRET` defaults to `gym-jinni-dev-secret-change-in-prod`.
 
 Note: `buf dep update` is intentionally a no-op (`bufmup`) because per-module update fails when protos import sibling workspace modules. BSR deps stay pinned in `buf.lock`.
 
