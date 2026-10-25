@@ -39,6 +39,38 @@ brew install ansible podman kubectl
 
 **Note:** k3d is invoked with `sudo -E` so `DOCKER_HOST` from Ansible reaches the same engine `podman build` uses under `sudo`.
 
+### Additional host setup (Debian/Kali, WSL2)
+
+The scripts and roles call `docker` and use `/var/run/docker.sock`, so on a Podman-only host install the Docker shim, and apply the fixes below. These are host-level changes; they are not made by `setup.sh`.
+
+```bash
+# `docker` command + /var/run/docker.sock -> /run/podman/podman.sock
+sudo apt-get install -y podman-docker
+
+# k3d is installed to /usr/local/bin by the playbook, but sudo's secure_path
+# omits that directory, so `sudo k3d` fails. Expose it in /usr/bin:
+sudo ln -sf /usr/local/bin/k3d /usr/bin/k3d
+
+# WSL2 kernels often lack the nftables modules netavark needs ("nft did not
+# return successfully while applying ruleset"). Use netavark's iptables driver
+# for the Podman API service (used by k3d) ...
+sudo mkdir -p /etc/systemd/system/podman.service.d
+printf '[Service]\nEnvironment=NETAVARK_FW=iptables\n' | \
+  sudo tee /etc/systemd/system/podman.service.d/netavark-fw.conf
+sudo systemctl daemon-reload && sudo systemctl restart podman.socket
+
+# ... and for `sudo podman/docker build` (sudo drops the environment):
+echo 'NETAVARK_FW=iptables' | sudo tee /etc/sudo_env
+echo 'Defaults env_file=/etc/sudo_env' | sudo tee /etc/sudoers.d/netavark-fw
+sudo chmod 440 /etc/sudoers.d/netavark-fw && sudo visudo -c
+```
+
+Notes:
+
+- `setup.sh` exports `ANSIBLE_CONFIG` itself because Ansible ignores `./ansible.cfg` in world-writable directories such as `/mnt/c` on WSL.
+- Podman stores local images as `localhost/<name>`; the build roles therefore tag and import images as `docker.io/gym-jinni/*`, which matches the manifests' `gym-jinni/*:latest` with `imagePullPolicy: Never`.
+- If a failed run leaves a half-deleted cluster, remove it before re-running: `sudo k3d cluster delete gym-jinni`.
+
 ## Quick Start
 
 ### 1. Setup the entire environment
