@@ -8,7 +8,7 @@
 - name: Build main service container image
   shell: |
     cd {{ playbook_dir }}/../../
-    sudo docker build -f k8s-setup/container/Dockerfile.service -t gym-jinni/service:latest .
+    sudo docker build -f k8s-setup/container/Dockerfile.service -t docker.io/gym-jinni/service:latest .
   args:
     chdir: "{{ playbook_dir }}/../../"
   register: build_service
@@ -17,7 +17,7 @@
     or 'successfully tagged' in (build_service.stdout | default('') ~ build_service.stderr | default('')) | lower
 
 - name: Import service image into k3d cluster
-  shell: sudo -E k3d image import gym-jinni/service:latest -c gym-jinni
+  shell: sudo -E k3d image import docker.io/gym-jinni/service:latest -c gym-jinni
   environment:
     DOCKER_HOST: "{{ k3d_docker_host }}"
   register: import_result

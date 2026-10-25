@@ -33,6 +33,9 @@ echo ""
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 cd "$SCRIPT_DIR"
 
+# Ansible ignores ./ansible.cfg in world-writable dirs (e.g. /mnt/c on WSL); an explicit path is honored.
+export ANSIBLE_CONFIG="$SCRIPT_DIR/ansible.cfg"
+
 # Parse command line arguments
 SKIP_BUILD=false
 SKIP_DEPLOY=false
@@ -78,7 +81,8 @@ echo ""
 # Step 2: Export KUBECONFIG
 echo -e "${YELLOW}Step 2: Configuring kubectl access...${NC}"
 export KUBECONFIG=$HOME/.kube/gym-jinni-config
-echo "export KUBECONFIG=$HOME/.kube/gym-jinni-config" >> $HOME/.bashrc
+KUBECONFIG_LINE="export KUBECONFIG=$HOME/.kube/gym-jinni-config"
+grep -qxF "$KUBECONFIG_LINE" "$HOME/.bashrc" 2>/dev/null || echo "$KUBECONFIG_LINE" >> "$HOME/.bashrc"
 
 echo -e "${GREEN}✓ kubectl configured${NC}"
 echo ""
