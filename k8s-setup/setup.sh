@@ -19,6 +19,12 @@ command -v ansible-playbook >/dev/null 2>&1 || { echo -e "${RED}Error: ansible i
 command -v kubectl >/dev/null 2>&1 || { echo -e "${RED}Error: kubectl is not installed${NC}" >&2; exit 1; }
 command -v docker >/dev/null 2>&1 || { echo -e "${RED}Error: docker is not installed${NC}" >&2; exit 1; }
 
+# Podman's docker CLI wrapper does not check the Docker API socket used by k3d.
+# Prefer Docker when available, otherwise use the rootful Podman API socket.
+if [ -z "${DOCKER_HOST:-}" ] && [ ! -S /var/run/docker.sock ] && [ -S /run/podman/podman.sock ]; then
+    export DOCKER_HOST=unix:///run/podman/podman.sock
+fi
+
 # k3d uses the Docker API; require a reachable daemon (same engine Ansible uses).
 if ! docker info >/dev/null 2>&1 && ! sudo docker info >/dev/null 2>&1; then
     echo -e "${RED}Error: Docker daemon is not reachable (required for k3d).${NC}" >&2

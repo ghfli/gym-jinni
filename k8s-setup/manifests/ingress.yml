@@ -8,13 +8,13 @@ metadata:
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
     cert-manager.io/cluster-issuer: "letsencrypt-prod"
 spec:
-  ingressClassName: public
+  ingressClassName: traefik
   tls:
   - hosts:
-    - gjdev.itcorker.com
+    - ${GYM_JINNI_DOMAIN}
     secretName: gym-jinni-tls
   rules:
-  - host: gjdev.itcorker.com
+  - host: ${GYM_JINNI_DOMAIN}
     http:
       paths:
       - path: /

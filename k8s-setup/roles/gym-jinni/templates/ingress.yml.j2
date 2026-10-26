@@ -8,7 +8,7 @@ metadata:
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
     cert-manager.io/cluster-issuer: "letsencrypt-prod"
 spec:
-  ingressClassName: public
+  ingressClassName: {{ gym_jinni_ingress_class }}
   tls:
   - hosts:
     - {{ gym_jinni_domain }}

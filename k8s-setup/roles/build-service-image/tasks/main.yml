@@ -17,7 +17,7 @@
     or 'successfully tagged' in (build_service.stdout | default('') ~ build_service.stderr | default('')) | lower
 
 - name: Import service image into k3d cluster
-  shell: sudo -E k3d image import docker.io/gym-jinni/service:latest -c gym-jinni
+  shell: sudo -E k3d image import docker.io/gym-jinni/service:latest -c gym-jinni --mode direct
   environment:
     DOCKER_HOST: "{{ k3d_docker_host }}"
   register: import_result

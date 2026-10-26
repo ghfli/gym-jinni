@@ -35,13 +35,13 @@ sudo systemctl enable --now podman.socket
 brew install ansible podman kubectl
 ```
 
-**Podman socket:** Ansible and k3d expect the **rootful** API socket at `unix:///run/podman/podman.sock` (the default after `systemctl enable --now podman.socket` on Linux). Override `k3d_docker_host` / `k3d_podman_socket_path` in `group_vars/all.yml` if you use a different layout.
+**Podman socket:** Setup uses `DOCKER_HOST` when set. Otherwise it uses `/var/run/docker.sock`, falling back to the **rootful** Podman socket at `/run/podman/podman.sock` when only that socket exists. Ansible also honors `DOCKER_HOST`; override `k3d_docker_host` in inventory if needed. Builds run with `sudo`, so use the rootful engine for k3d too. If your shell points to an inactive rootless socket, run `DOCKER_HOST=unix:///run/podman/podman.sock ./setup.sh`.
 
 **Note:** k3d is invoked with `sudo -E` so `DOCKER_HOST` from Ansible reaches the same engine `podman build` uses under `sudo`.
 
 ### Additional host setup (Debian/Kali, WSL2)
 
-The scripts and roles call `docker` and use `/var/run/docker.sock`, so on a Podman-only host install the Docker shim, and apply the fixes below. These are host-level changes; they are not made by `setup.sh`.
+The scripts and roles call `docker`, so on a Podman-only host install the Docker shim, and apply the fixes below as needed. These are host-level changes; they are not made by `setup.sh`.
 
 ```bash
 # `docker` command + /var/run/docker.sock -> /run/podman/podman.sock
@@ -69,6 +69,7 @@ Notes:
 
 - `setup.sh` exports `ANSIBLE_CONFIG` itself because Ansible ignores `./ansible.cfg` in world-writable directories such as `/mnt/c` on WSL.
 - Podman stores local images as `localhost/<name>`; the build roles therefore tag and import images as `docker.io/gym-jinni/*`, which matches the manifests' `gym-jinni/*:latest` with `imagePullPolicy: Never`.
+- Image imports use k3d's direct mode so they do not depend on a helper container mounting the default Docker socket.
 - If a failed run leaves a half-deleted cluster, remove it before re-running: `sudo k3d cluster delete gym-jinni`.
 
 ## Quick Start
@@ -87,6 +88,22 @@ This will:
 3. Configure kubectl access
 4. Build container images for all services (Podman)
 5. Deploy all services to Kubernetes
+
+Set `GYM_JINNI_DOMAIN` to override the ingress hostname and TLS certificate domain:
+
+```bash
+GYM_JINNI_DOMAIN=gym.example.com ./setup.sh
+```
+
+An unset or empty value defaults to `gjdev.itcorker.com`. The same variable works
+when invoking the Ansible deployment playbook directly. Ansible renders the
+ingress template automatically. To apply `manifests/ingress.yml` manually, render
+its environment placeholders first (requires `envsubst`):
+
+```bash
+export GYM_JINNI_DOMAIN="${GYM_JINNI_DOMAIN:-gjdev.itcorker.com}"
+envsubst '${GYM_JINNI_DOMAIN}' < manifests/ingress.yml | kubectl apply -f -
+```
 
 ### 2. Access the cluster
 
@@ -320,8 +337,8 @@ sudo podman images | grep gym-jinni
 
 # Import images to k3d cluster (same DOCKER_HOST as Ansible)
 export DOCKER_HOST=unix:///run/podman/podman.sock
-sudo -E k3d image import gym-jinni/service:latest -c gym-jinni
-sudo -E k3d image import gym-jinni/ui:latest -c gym-jinni
+sudo -E k3d image import docker.io/gym-jinni/service:latest -c gym-jinni --mode direct
+sudo -E k3d image import docker.io/gym-jinni/ui:latest -c gym-jinni --mode direct
 
 # Check pod events
 kubectl describe pod <pod-name> -n gym-jinni

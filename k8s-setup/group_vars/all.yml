@@ -1,11 +1,14 @@
 ---
 # k3d talks to the container engine via the Docker API (default Docker socket).
-k3d_docker_host: "unix:///var/run/docker.sock"
+k3d_docker_host: "{{ lookup('env', 'DOCKER_HOST') | default('unix:///var/run/docker.sock', true) }}"
 
 # Public-facing domain and server IP. Change these to retarget the deployment
 # to a different host without editing individual manifest files.
-gym_jinni_domain: "gjdev.itcorker.com"
+gym_jinni_domain: "{{ lookup('env', 'GYM_JINNI_DOMAIN') | default('gjdev.itcorker.com', true) }}"
 gym_jinni_server_ip: "212.56.44.229"
+
+# k3s ships with the Traefik ingress controller.
+gym_jinni_ingress_class: "traefik"
 
 # Email used when registering the Let's Encrypt ACME account.
 acme_email: "newstart.infotech@gmail.com"

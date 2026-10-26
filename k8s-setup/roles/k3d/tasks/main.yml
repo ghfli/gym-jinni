@@ -27,7 +27,9 @@
   when: k3d_check.rc != 0
 
 - name: Verify Docker daemon is reachable (required for k3d)
-  shell: 'sudo DOCKER_HOST="{{ k3d_docker_host }}" docker info'
+  shell: sudo -E k3d cluster list
+  environment:
+    DOCKER_HOST: "{{ k3d_docker_host }}"
   register: k3d_docker_info
   changed_when: false
   failed_when: false
@@ -36,7 +38,8 @@
   fail:
     msg: >-
       Docker daemon is not reachable with DOCKER_HOST={{ k3d_docker_host }}.
-      Install/start Docker and ensure `sudo docker info` works, or override k3d_docker_host in inventory.
+      Start the Docker/Podman API socket and ensure `sudo -E k3d cluster list` works,
+      or set DOCKER_HOST / override k3d_docker_host in inventory.
   when: k3d_docker_info.rc != 0
 
 - name: Check if k3d cluster already exists
@@ -63,6 +66,7 @@
     | grep -w "{{ k3d_cluster_name }}" || true
   register: k3d_docker_dup_check
   changed_when: false
+  when: k3d_docker_host != 'unix:///var/run/docker.sock'
 
 - name: Fail when conflicting k3d cluster still exists on default Docker socket
   fail:
@@ -71,7 +75,7 @@
       unix:///var/run/docker.sock while this playbook uses DOCKER_HOST={{ k3d_docker_host }}.
       It can keep host ports such as {{ k3d_api_port }} busy. Delete the conflicting cluster, then re-run:
       sudo DOCKER_HOST=unix:///var/run/docker.sock k3d cluster delete {{ k3d_cluster_name }}
-  when: k3d_docker_dup_check.stdout | length > 0
+  when: k3d_docker_dup_check.stdout | default('') | length > 0
 
 # Ansible waits for the whole shell to exit and does not stream k3d output live, so this
 # step prints nothing until k3d finishes (or timeout(1) kills it after 3600s → rc 124).
