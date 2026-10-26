@@ -158,6 +158,17 @@ chmod +x teardown.sh
 ./teardown.sh
 ```
 
+Teardown uses the same `DOCKER_HOST` selection as setup. To target the rootful
+Podman engine explicitly:
+
+```bash
+DOCKER_HOST=unix:///run/podman/podman.sock ./teardown.sh
+```
+
+Use `--force` to skip prompts and remove the two application image tags as well.
+Cleanup targets the Gym-Jinni cluster and images; it does not run a system-wide
+container prune. Cluster and image deletion failures stop the script.
+
 ## Manual Setup (Step by Step)
 
 If you want more control, run Ansible playbooks manually:

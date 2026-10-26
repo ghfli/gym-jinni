@@ -108,11 +108,11 @@
 # opens the file as the normal user, which then fails with "Permission denied".
 - name: Create .kube directory
   file:
-    path: "{{ ansible_env.HOME }}/.kube"
+    path: "{{ ansible_facts['env']['HOME'] }}/.kube"
     state: directory
     mode: '0755'
-    owner: "{{ ansible_user_id }}"
-    group: "{{ ansible_user_gid }}"
+    owner: "{{ ansible_facts['user_id'] }}"
+    group: "{{ ansible_facts['user_gid'] }}"
   become: true
 
 # Avoid "sudo ... > path": the redirect is handled by the user shell, not root.

@@ -7,7 +7,7 @@
 
 - name: Set KUBECONFIG environment
   set_fact:
-    kubeconfig_path: "{{ ansible_env.HOME }}/.kube/gym-jinni-config"
+    kubeconfig_path: "{{ ansible_facts['env']['HOME'] }}/.kube/gym-jinni-config"
 
 - name: Apply namespace
   shell: |

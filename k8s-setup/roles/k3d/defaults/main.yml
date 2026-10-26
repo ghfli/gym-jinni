@@ -9,7 +9,7 @@ k3d_cluster_name: "gym-jinni"
 k3d_servers: 1
 k3d_agents: 2
 k3d_api_port: 6443
-k3d_kubeconfig_path: "{{ ansible_env.HOME }}/.kube/gym-jinni-config"
+k3d_kubeconfig_path: "{{ ansible_facts['env']['HOME'] }}/.kube/gym-jinni-config"
 
 # Port mappings for services (host -> k3d LB -> NodePort inside the cluster).
 # Use 39xxx on the host so docker-proxy does not occupy 3000/808x; those stay

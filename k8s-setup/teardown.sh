@@ -1,7 +1,10 @@
 #!/bin/bash
 set -e
 
-# k3d uses the Docker API; default to the local Docker daemon socket.
+# Use the same socket selection as setup.sh.
+if [ -z "${DOCKER_HOST:-}" ] && [ ! -S /var/run/docker.sock ] && [ -S /run/podman/podman.sock ]; then
+    export DOCKER_HOST=unix:///run/podman/podman.sock
+fi
 export DOCKER_HOST="${DOCKER_HOST:-unix:///var/run/docker.sock}"
 
 # Colors for output
@@ -65,8 +68,11 @@ echo -e "${YELLOW}Step 1: Deleting Kubernetes resources...${NC}"
 export KUBECONFIG=$HOME/.kube/gym-jinni-config
 
 if [ -f "$KUBECONFIG" ]; then
-    kubectl delete namespace gym-jinni --ignore-not-found=true --timeout=60s || true
-    echo -e "${GREEN}✓ Kubernetes resources deleted${NC}"
+    if kubectl delete namespace gym-jinni --ignore-not-found=true --timeout=60s; then
+        echo -e "${GREEN}✓ Kubernetes resources deleted${NC}"
+    else
+        echo -e "${YELLOW}⚠ Namespace deletion failed; continuing with cluster deletion${NC}" >&2
+    fi
 else
     echo -e "${YELLOW}⚠ Kubeconfig not found, skipping K8s resource deletion${NC}"
 fi
@@ -76,14 +82,19 @@ echo ""
 echo -e "${YELLOW}Step 2: Deleting k3d cluster...${NC}"
 
 if command -v k3d >/dev/null 2>&1; then
-    if sudo -E k3d cluster list 2>/dev/null | grep -q "gym-jinni"; then
-        sudo -E k3d cluster delete gym-jinni 2>/dev/null || true
+    if ! CLUSTERS=$(sudo -E k3d cluster list --no-headers); then
+        echo -e "${RED}Error: Cannot list clusters using DOCKER_HOST=$DOCKER_HOST${NC}" >&2
+        exit 1
+    fi
+    if echo "$CLUSTERS" | grep -q '^gym-jinni[[:space:]]'; then
+        sudo -E k3d cluster delete gym-jinni
         echo -e "${GREEN}✓ k3d cluster deleted${NC}"
     else
         echo -e "${YELLOW}⚠ k3d cluster not found${NC}"
     fi
 else
-    echo -e "${YELLOW}⚠ k3d not installed, skipping cluster deletion${NC}"
+    echo -e "${RED}Error: k3d is not installed; cannot delete the cluster${NC}" >&2
+    exit 1
 fi
 echo ""
 
@@ -99,27 +110,30 @@ fi
 echo ""
 
 # Step 4: Clean up local container images (optional)
+remove_images() {
+    local images image
+    images=$(sudo docker image ls --format '{{.Repository}}:{{.Tag}}')
+    for image in docker.io/gym-jinni/service:latest docker.io/gym-jinni/ui:latest; do
+        if echo "$images" | grep -qxF "$image" || echo "$images" | grep -qxF "${image#docker.io/}"; then
+            sudo docker rmi "$image"
+        fi
+    done
+    echo -e "${GREEN}✓ Container image cleanup complete${NC}"
+}
+
 echo -e "${YELLOW}Step 4: Cleaning up container images...${NC}"
 if [ "$FORCE" = false ]; then
     read -p "Do you want to remove built container images (docker)? (yes/no): " -r
     echo ""
     if [[ $REPLY =~ ^[Yy][Ee][Ss]$ ]]; then
-        sudo docker rmi gym-jinni/service:latest 2>/dev/null || true
-        sudo docker rmi gym-jinni/ui:latest 2>/dev/null || true
-        echo -e "${GREEN}✓ Container images removed${NC}"
+        remove_images
     else
         echo -e "${YELLOW}⚠ Skipping container image removal${NC}"
     fi
 else
-    sudo docker rmi gym-jinni/service:latest 2>/dev/null || true
-    sudo docker rmi gym-jinni/ui:latest 2>/dev/null || true
-    echo -e "${GREEN}✓ Container images removed${NC}"
+    remove_images
 fi
 echo ""
-
-# Final cleanup
-echo -e "${YELLOW}Performing final cleanup...${NC}"
-sudo docker system prune -f 2>/dev/null || true
 
 echo ""
 echo -e "${GREEN}========================================${NC}"

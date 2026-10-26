@@ -20,7 +20,7 @@
           - "=========================================="
           - ""
           - "Cluster name: gym-jinni"
-          - "Kubeconfig: {{ ansible_env.HOME }}/.kube/gym-jinni-config"
+          - "Kubeconfig: {{ ansible_facts['env']['HOME'] }}/.kube/gym-jinni-config"
           - ""
           - "To use kubectl:"
           - "  export KUBECONFIG=$HOME/.kube/gym-jinni-config"
