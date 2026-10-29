@@ -18,6 +18,7 @@ COPY service/go.mod service/go.sum ./service/
 WORKDIR /build/service
 RUN go mod download
 
+# .dockerignore excludes local gen/ so protobuf and sqlc start from clean output.
 COPY service/ ./
 
 WORKDIR /build/service

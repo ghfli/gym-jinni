@@ -1,0 +1,6 @@
+# Generated bindings must be regenerated in the service builder. Local gen/
+# may contain obsolete hand-written stubs that conflict with protobuf output.
+service/gen/
+service/cmd/service
+service/cmd/grpcclt
+.git/
