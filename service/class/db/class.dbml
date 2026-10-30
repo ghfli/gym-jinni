@@ -12,3 +12,6 @@ Table class.class {
   min_hdcnt int
   max_hdcnt int
 }
+
+// Migration 000013 enforces start_time < end_time and nonnegative capacities.
+// max_hdcnt=0 means unlimited; finite maximum must be >= minimum.

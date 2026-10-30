@@ -14,7 +14,7 @@ grpcclt: bufgen
 	go build -o cmd/$@ cmd/$@.go
 
 test: all pgup
-	export DBURL="${DBURL}"; cmd/service &
+	export DBURL="${DBURL}"; APP_ENV=development cmd/service &
 	cmd/grpcclt
 	cmd/httpclt.sh
 	killall -e cmd/service
@@ -41,11 +41,12 @@ bufpush: bufbld
 
 # Refresh committed schema/*.sql from DBML (requires dbml2sql); optional
 dbsch:
-	@command -v dbml2sql >/dev/null 2>&1 || { echo "skip dbsch: install dbml2sql to refresh schema/"; exit 0; }
-	mkdir -p schema
-	for s in ${SVCS} ; do \
-		dbml2sql --postgres -o schema/$$s.sql $$s/db/$$s.dbml ; \
-	done
+	@if command -v dbml2sql >/dev/null 2>&1; then \
+		set -e; mkdir -p schema; \
+		for s in ${SVCS}; do dbml2sql --postgres -o schema/$$s.sql $$s/db/$$s.dbml; done; \
+		cat schema/constraints/class.sql >> schema/class.sql; \
+		cat schema/constraints/class.sql schema/constraints/booking.sql >> schema/booking.sql; \
+	else echo "skip dbsch: install dbml2sql to refresh schema/"; fi
 
 dbsql:
 	for s in ${SVCS} ; do (cd $$s/db && sqlc generate) ; done

@@ -23,3 +23,6 @@ WHERE id = $1;
 DELETE FROM "class".class
 WHERE id = $1;
 
+
+-- name: GetClassForUpdate :one
+SELECT * FROM "class".class WHERE id=$1 FOR UPDATE;

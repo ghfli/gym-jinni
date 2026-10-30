@@ -34,3 +34,6 @@ SELECT EXISTS(
   SELECT 1 FROM booking.booking
   WHERE user_id = $1 AND class_id = $2 AND status = 'confirmed'
 ) as already_booked;
+
+-- name: GetBookingForUpdate :one
+SELECT * FROM booking.booking WHERE id=$1 FOR UPDATE;

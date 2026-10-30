@@ -3,6 +3,9 @@ package booking
 import (
 	"context"
 	"database/sql"
+	"errors"
+	"github.com/ghfli/gym-jinni/service/middleware"
+	"github.com/jackc/pgconn"
 	"log"
 	"os"
 	"time"
@@ -17,17 +20,16 @@ import (
 
 type ImBookingServiceServer struct {
 	UnimplementedBookingServiceServer
-	db      *sql.DB
-	q       *Queries
-	classQ  *classdb.Queries
+	db     *sql.DB
+	q      *Queries
+	classQ *classdb.Queries
 }
 
 func NewImBookingServiceServer() (*ImBookingServiceServer, error) {
 	dburl := os.Getenv("DBURL")
-	log.Println("DBURL", dburl)
 	db, err := sql.Open("pgx", dburl)
 	if err != nil {
-		log.Printf("Failed to open DBURL %s: %v", dburl, err)
+		log.Printf("Failed to open database: %v", err)
 		return &ImBookingServiceServer{}, err
 	}
 	return &ImBookingServiceServer{
@@ -83,71 +85,90 @@ func bookingToProto(b BookingBooking) *Booking {
 }
 
 func (s *ImBookingServiceServer) CreateBooking(ctx context.Context, req *CreateBookingRequest) (*CreateBookingResponse, error) {
-	log.Printf("CreateBooking: user=%d class=%d", req.GetUserId(), req.GetClassId())
-
-	dup, err := s.q.CheckDuplicateBooking(ctx, CheckDuplicateBookingParams{
-		UserID:  req.GetUserId(),
-		ClassID: req.GetClassId(),
-	})
+	if req.GetClassId() <= 0 || req.GetUserId() <= 0 {
+		return nil, status.Error(codes.InvalidArgument, "user and class IDs are required")
+	}
+	if err := middleware.RequireSelf(ctx, req.GetUserId()); err != nil {
+		return nil, err
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "check duplicate: %v", err)
+		return nil, status.Error(codes.Internal, "begin booking")
+	}
+	defer tx.Rollback()
+	q := s.q.WithTx(tx)
+	cls, err := s.classQ.WithTx(tx).GetClassForUpdate(ctx, req.GetClassId())
+	if err == sql.ErrNoRows {
+		return nil, status.Error(codes.NotFound, "class not found")
+	}
+	if err != nil {
+		return nil, status.Error(codes.Internal, "lock class")
+	}
+	dup, err := q.CheckDuplicateBooking(ctx, CheckDuplicateBookingParams{UserID: req.GetUserId(), ClassID: req.GetClassId()})
+	if err != nil {
+		return nil, status.Error(codes.Internal, "check duplicate")
 	}
 	if dup {
-		return nil, status.Errorf(codes.AlreadyExists, "user already booked this class")
+		return nil, status.Error(codes.AlreadyExists, "user already booked this class")
 	}
-
-	cls, err := s.classQ.GetClass(ctx, req.GetClassId())
+	count, err := q.CountClassBookings(ctx, req.GetClassId())
 	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, status.Errorf(codes.NotFound, "class %d not found", req.GetClassId())
-		}
-		return nil, status.Errorf(codes.Internal, "get class: %v", err)
+		return nil, status.Error(codes.Internal, "count bookings")
 	}
-
-	if cls.MaxHdcnt.Valid && cls.MaxHdcnt.Int32 > 0 {
-		count, err := s.q.CountClassBookings(ctx, req.GetClassId())
-		if err != nil {
-			return nil, status.Errorf(codes.Internal, "count bookings: %v", err)
-		}
-		if count >= int64(cls.MaxHdcnt.Int32) {
-			return nil, status.Errorf(codes.ResourceExhausted, "class is full (%d/%d)", count, cls.MaxHdcnt.Int32)
-		}
+	if cls.MaxHdcnt.Valid && cls.MaxHdcnt.Int32 > 0 && count >= int64(cls.MaxHdcnt.Int32) {
+		return nil, status.Error(codes.ResourceExhausted, "class is full")
 	}
-
-	row, err := s.q.CreateBooking(ctx, CreateBookingParams{
-		UserID:  req.GetUserId(),
-		ClassID: req.GetClassId(),
-	})
+	row, err := q.CreateBooking(ctx, CreateBookingParams{UserID: req.GetUserId(), ClassID: req.GetClassId()})
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "create booking: %v", err)
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			return nil, status.Error(codes.AlreadyExists, "user already booked this class")
+		}
+		return nil, status.Error(codes.Internal, "create booking")
 	}
-
+	if err := tx.Commit(); err != nil {
+		return nil, status.Error(codes.Internal, "commit booking")
+	}
 	return &CreateBookingResponse{Booking: bookingToProto(row)}, nil
 }
 
 func (s *ImBookingServiceServer) CancelBooking(ctx context.Context, req *CancelBookingRequest) (*CancelBookingResponse, error) {
-	log.Printf("CancelBooking: id=%d", req.GetId())
-
 	existing, err := s.q.GetBooking(ctx, req.GetId())
+	if err == sql.ErrNoRows {
+		return nil, status.Error(codes.NotFound, "booking not found")
+	}
 	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, status.Errorf(codes.NotFound, "booking %d not found", req.GetId())
-		}
-		return nil, status.Errorf(codes.Internal, "get booking: %v", err)
+		return nil, status.Error(codes.Internal, "get booking")
 	}
-	if existing.Status == "cancelled" {
-		return nil, status.Errorf(codes.FailedPrecondition, "booking already cancelled")
+	if err := s.authorizeBooking(ctx, existing); err != nil {
+		return nil, err
 	}
-
-	if err := s.q.CancelBooking(ctx, req.GetId()); err != nil {
-		return nil, status.Errorf(codes.Internal, "cancel booking: %v", err)
-	}
-
-	row, err := s.q.GetBooking(ctx, req.GetId())
+	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "get updated booking: %v", err)
+		return nil, status.Error(codes.Internal, "begin cancellation")
 	}
-
+	defer tx.Rollback()
+	if _, err := s.classQ.WithTx(tx).GetClassForUpdate(ctx, existing.ClassID); err != nil {
+		return nil, status.Error(codes.Internal, "lock class")
+	}
+	q := s.q.WithTx(tx)
+	existing, err = q.GetBookingForUpdate(ctx, req.GetId())
+	if err != nil {
+		return nil, status.Error(codes.Internal, "lock booking")
+	}
+	if existing.Status != "confirmed" {
+		return nil, status.Error(codes.FailedPrecondition, "only confirmed bookings can be cancelled")
+	}
+	if err := q.CancelBooking(ctx, req.GetId()); err != nil {
+		return nil, status.Error(codes.Internal, "cancel booking")
+	}
+	row, err := q.GetBooking(ctx, req.GetId())
+	if err != nil {
+		return nil, status.Error(codes.Internal, "get cancelled booking")
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, status.Error(codes.Internal, "commit cancellation")
+	}
 	return &CancelBookingResponse{Booking: bookingToProto(row)}, nil
 }
 
@@ -159,10 +180,16 @@ func (s *ImBookingServiceServer) GetBooking(ctx context.Context, req *GetBooking
 		}
 		return nil, status.Errorf(codes.Internal, "get booking: %v", err)
 	}
+	if err := s.authorizeBooking(ctx, row); err != nil {
+		return nil, err
+	}
 	return &GetBookingResponse{Booking: bookingToProto(row)}, nil
 }
 
 func (s *ImBookingServiceServer) ListUserBookings(ctx context.Context, req *ListUserBookingsRequest) (*ListUserBookingsResponse, error) {
+	if err := middleware.RequireOwnerOrAdmin(ctx, s.db, req.GetUserId()); err != nil {
+		return nil, err
+	}
 	rows, err := s.q.ListUserBookings(ctx, req.GetUserId())
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "list user bookings: %v", err)
@@ -175,6 +202,9 @@ func (s *ImBookingServiceServer) ListUserBookings(ctx context.Context, req *List
 }
 
 func (s *ImBookingServiceServer) ListClassBookings(ctx context.Context, req *ListClassBookingsRequest) (*ListClassBookingsResponse, error) {
+	if err := s.authorizeClass(ctx, req.GetClassId()); err != nil {
+		return nil, err
+	}
 	rows, err := s.q.ListClassBookings(ctx, req.GetClassId())
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "list class bookings: %v", err)
@@ -184,4 +214,25 @@ func (s *ImBookingServiceServer) ListClassBookings(ctx context.Context, req *Lis
 		bookings[i] = bookingToProto(row)
 	}
 	return &ListClassBookingsResponse{Bookings: bookings}, nil
+}
+
+func (s *ImBookingServiceServer) authorizeClass(ctx context.Context, classID int32) error {
+	cls, err := s.classQ.GetClass(ctx, classID)
+	if err == sql.ErrNoRows {
+		return status.Error(codes.NotFound, "class not found")
+	}
+	if err != nil {
+		return status.Error(codes.Internal, "get class scope")
+	}
+	return middleware.RequireOwnerOrAdmin(ctx, s.db, cls.CreatedBy.Int32)
+}
+func (s *ImBookingServiceServer) authorizeBooking(ctx context.Context, b BookingBooking) error {
+	actor, err := middleware.GetUserIDFromContext(ctx)
+	if err != nil {
+		return err
+	}
+	if actor == b.UserID {
+		return nil
+	}
+	return s.authorizeClass(ctx, b.ClassID)
 }

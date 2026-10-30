@@ -31,3 +31,8 @@ CREATE TABLE booking.booking (
   booked_at timestamptz NOT NULL DEFAULT now(),
   cancelled_at timestamptz
 );
+
+CREATE UNIQUE INDEX booking_confirmed_user_class ON booking.booking(user_id,class_id) WHERE status='confirmed';
+
+ALTER TABLE "class"."class" ADD CONSTRAINT class_time_range CHECK(start_time<end_time);
+ALTER TABLE "class"."class" ADD CONSTRAINT class_capacity CHECK(coalesce(min_hdcnt,0)>=0 AND coalesce(max_hdcnt,0)>=0 AND (coalesce(max_hdcnt,0)=0 OR coalesce(min_hdcnt,0)<=max_hdcnt));

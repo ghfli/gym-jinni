@@ -1,6 +1,6 @@
 Project gymjinni_booking {
   database_type: 'PostgreSQL'
-  Note: 'gymjinni booking management database schema'
+  Note: 'gymjinni booking management database schema; migration 000013 adds a partial unique index on (user_id,class_id) WHERE status=confirmed (not expressible as an ordinary DBML unique index)'
 }
 
 Table booking.booking {

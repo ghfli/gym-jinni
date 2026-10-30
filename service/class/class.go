@@ -3,8 +3,10 @@ package class
 import (
 	"context"
 	"database/sql"
+	"github.com/ghfli/gym-jinni/service/middleware"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	. "github.com/ghfli/gym-jinni/service/gen/go/class/v1alpha"
@@ -22,10 +24,9 @@ type ImClassServiceServer struct {
 
 func NewImClassServiceServer() (*ImClassServiceServer, error) {
 	dburl := os.Getenv("DBURL")
-	log.Println("DBURL", dburl)
 	db, err := sql.Open("pgx", dburl)
 	if err != nil {
-		log.Printf("Failed to open DBURL %s: %v", dburl, err)
+		log.Printf("Failed to open database: %v", err)
 		return &ImClassServiceServer{}, err
 	}
 	return &ImClassServiceServer{
@@ -71,7 +72,17 @@ func classToProto(c ClassClass) *Class {
 
 func (s *ImClassServiceServer) CreateClass(ctx context.Context, req *CreateClassRequest) (*CreateClassResponse, error) {
 	c := req.GetClass()
-	log.Println("CreateClass request:", c)
+	if err := validateClass(c); err != nil {
+		return nil, err
+	}
+	actor, err := middleware.GetUserIDFromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if c.GetCreatedBy() != 0 && c.GetCreatedBy() != actor {
+		return nil, status.Error(codes.PermissionDenied, "cannot impersonate class creator")
+	}
+	c.CreatedBy = actor
 
 	row, err := s.q.CreateClass(ctx, CreateClassParams{
 		CreatedBy:   sql.NullInt32{Int32: int32(c.GetCreatedBy()), Valid: c.GetCreatedBy() > 0},
@@ -121,9 +132,39 @@ func (s *ImClassServiceServer) ListClasses(ctx context.Context, req *ListClasses
 
 func (s *ImClassServiceServer) UpdateClass(ctx context.Context, req *UpdateClassRequest) (*UpdateClassResponse, error) {
 	c := req.GetClass()
-	log.Println("UpdateClass request:", c)
+	if err := validateClass(c); err != nil {
+		return nil, err
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, status.Error(codes.Internal, "begin class update")
+	}
+	defer tx.Rollback()
+	q := s.q.WithTx(tx)
+	existing, err := q.GetClassForUpdate(ctx, c.GetId())
+	if err == sql.ErrNoRows {
+		return nil, status.Error(codes.NotFound, "class not found")
+	}
+	if err != nil {
+		return nil, status.Error(codes.Internal, "lock class")
+	}
+	if err := middleware.RequireOwnerOrAdmin(ctx, s.db, existing.CreatedBy.Int32); err != nil {
+		return nil, err
+	}
+	if c.GetCreatedBy() != 0 && c.GetCreatedBy() != existing.CreatedBy.Int32 {
+		return nil, status.Error(codes.PermissionDenied, "cannot change class creator")
+	}
+	if c.GetMaxHdcnt() > 0 {
+		var count int64
+		if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM booking.booking WHERE class_id=$1 AND status='confirmed'`, c.GetId()).Scan(&count); err != nil {
+			return nil, status.Error(codes.Internal, "count bookings")
+		}
+		if count > int64(c.GetMaxHdcnt()) {
+			return nil, status.Error(codes.FailedPrecondition, "capacity below confirmed bookings")
+		}
+	}
 
-	err := s.q.UpdateClass(ctx, UpdateClassParams{
+	err = q.UpdateClass(ctx, UpdateClassParams{
 		ID:          int32(c.GetId()),
 		Description: c.GetDescription(),
 		StartTime:   dateTimeToTime(c.GetStartTime()),
@@ -135,9 +176,13 @@ func (s *ImClassServiceServer) UpdateClass(ctx context.Context, req *UpdateClass
 		return nil, status.Errorf(codes.Internal, "update class: %v", err)
 	}
 
-	row, err := s.q.GetClass(ctx, int32(c.GetId()))
+	row, err := q.GetClass(ctx, int32(c.GetId()))
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "get updated class: %v", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, status.Error(codes.Internal, "commit class update")
 	}
 
 	return &UpdateClassResponse{Class: classToProto(row)}, nil
@@ -146,10 +191,47 @@ func (s *ImClassServiceServer) UpdateClass(ctx context.Context, req *UpdateClass
 func (s *ImClassServiceServer) DeleteClass(ctx context.Context, req *DeleteClassRequest) (*DeleteClassResponse, error) {
 	log.Println("DeleteClass request:", req.GetId())
 
-	err := s.q.DeleteClass(ctx, req.GetId())
+	existing, err := s.q.GetClass(ctx, req.GetId())
+	if err == sql.ErrNoRows {
+		return nil, status.Error(codes.NotFound, "class not found")
+	}
+	if err != nil {
+		return nil, status.Error(codes.Internal, "get class")
+	}
+	if err := middleware.RequireOwnerOrAdmin(ctx, s.db, existing.CreatedBy.Int32); err != nil {
+		return nil, err
+	}
+	err = s.q.DeleteClass(ctx, req.GetId())
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "delete class: %v", err)
 	}
 
 	return &DeleteClassResponse{Success: true}, nil
+}
+
+// A zero maximum means unlimited capacity; finite limits must cover the minimum.
+func validateClass(c *Class) error {
+	if c == nil || strings.TrimSpace(c.GetDescription()) == "" || c.GetStartTime() == nil || c.GetEndTime() == nil {
+		return status.Error(codes.InvalidArgument, "class start and end times are required")
+	}
+	if !validDateTime(c.GetStartTime()) || !validDateTime(c.GetEndTime()) || !dateTimeToTime(c.GetStartTime()).Before(dateTimeToTime(c.GetEndTime())) {
+		return status.Error(codes.InvalidArgument, "invalid class time range (UTC required)")
+	}
+	if c.GetMinHdcnt() < 0 || c.GetMaxHdcnt() < 0 || (c.GetMaxHdcnt() > 0 && c.GetMinHdcnt() > c.GetMaxHdcnt()) {
+		return status.Error(codes.InvalidArgument, "invalid class capacity")
+	}
+	return nil
+}
+func validDateTime(dt *datetime.DateTime) bool {
+	if dt.GetYear() < 1 || dt.GetYear() > 9999 || dt.GetNanos() < 0 || dt.GetNanos() >= 1e9 {
+		return false
+	}
+	if dt.GetUtcOffset() != nil && dt.GetUtcOffset().AsDuration() != 0 {
+		return false
+	}
+	if dt.GetTimeZone() != nil && dt.GetTimeZone().GetId() != "UTC" {
+		return false
+	}
+	t := dateTimeToTime(dt)
+	return int32(t.Year()) == dt.GetYear() && int32(t.Month()) == dt.GetMonth() && int32(t.Day()) == dt.GetDay() && int32(t.Hour()) == dt.GetHours() && int32(t.Minute()) == dt.GetMinutes() && int32(t.Second()) == dt.GetSeconds()
 }
