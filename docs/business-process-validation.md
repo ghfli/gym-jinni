@@ -1,6 +1,6 @@
 # HTTP and business-process validation
 
-Audit date: 2026-10-29. Contracts and source establish declared capabilities; only executed checks establish runtime behavior. Test failures are requirement failures and remain enabled. This audit adds tests and implementation tasks rather than changing application business behavior.
+Audit date: 2026-10-29. **The original failures below are historical; see Remediation results for the current implementation.** Contracts and source establish declared capabilities; only executed checks establish runtime behavior. Test failures are requirement failures and remain enabled. The initial audit added tests/tasks; subsequent remediation implements the confirmed defects and records the remaining feature work.
 
 ## Access points and web screens
 
@@ -24,13 +24,13 @@ The deployed UI uses one URL and internal navigation, with no named/deep-link ro
 | Classes | Classes tab / Browse Classes | List, view class dialog, book |
 | My Bookings | Bookings tab / My Bookings | List own bookings and cancel confirmed bookings |
 | Activity | Activity tab | Log workout/run/class activity; list and show totals |
-| Profile | Profile tab | Show in-memory name/ID; local logout only |
+| Profile | Profile tab | Show in-memory name/ID; server logout with owned session ID |
 
 The nginx image also maps `/api/` and `/rbac/` to the gateway root; e.g. `/api/v1/classes` rewrites to `/v1/classes`. These are configured aliases, not additional business APIs, and were not probed. Ingress depends on a configured domain/TLS and its rewrite behavior is unverified. `API_BASE` defaults to `http://127.0.0.1:39081` in source; the UI image explicitly builds with an empty value for same-origin requests.
 
 ## Complete HTTP contract inventory
 
-70 operations across 10 services, derived from protobuf annotations. `JWT` means authentication without a mapped permission. `JWT (unmapped)` exposes a policy gap. Public entries describe current policy, not approval of that policy. Permission checks do not establish ownership enforcement. Body/query shapes remain defined by protobuf.
+70 operations across 10 services, derived from protobuf annotations. Access entries reflect the remedied policies; handler ownership checks supplement operation permissions. Global reports now require system-admin scope. `JWT` means authentication without a mapped permission. `JWT (unmapped)` exposes a policy gap. Public entries describe current policy, not approval of that policy. Permission checks do not establish ownership enforcement. Body/query shapes remain defined by protobuf.
 
 | Domain | HTTP operation | RPC | Current access | Screen |
 | --- | --- | --- | --- | --- |
@@ -45,7 +45,7 @@ The nginx image also maps `/api/` and `/rbac/` to the gateway root; e.g. `/api/v
 | [booking](../service/booking/pb/booking/v1alpha/booking.proto) | `GET /v1/classes/{class_id}/bookings` | `ListClassBookings` | JWT + `view_booking` | API only |
 | [class](../service/class/pb/class/v1alpha/class.proto) | `POST /v1/classes` | `CreateClass` | JWT + `create_class` | API only |
 | [class](../service/class/pb/class/v1alpha/class.proto) | `GET /v1/classes/{id}` | `GetClass` | JWT + `view_class` | API only |
-| [class](../service/class/pb/class/v1alpha/class.proto) | `GET /v1/classes` | `ListClasses` | JWT (unmapped) | Classes |
+| [class](../service/class/pb/class/v1alpha/class.proto) | `GET /v1/classes` | `ListClasses` | JWT + `view_class` | Classes |
 | [class](../service/class/pb/class/v1alpha/class.proto) | `PUT /v1/classes/{class.id}` | `UpdateClass` | JWT + `update_class` | API only |
 | [class](../service/class/pb/class/v1alpha/class.proto) | `DELETE /v1/classes/{id}` | `DeleteClass` | JWT + `delete_class` | API only |
 | [gym](../service/gym/pb/gym/v1alpha/gym.proto) | `POST /v1/gyms` | `CreateGym` | JWT + `manage_gym` | API only |
@@ -78,10 +78,10 @@ The nginx image also maps `/api/` and `/rbac/` to the gateway root; e.g. `/api/v
 | [rbac](../service/rbac/pb/rbac/v1alpha/rbac.proto) | `POST /v1/roles/{role_id}/permissions/{permission_id}` | `AssignPermissionToRole` | JWT + `manage_roles` | API only |
 | [rbac](../service/rbac/pb/rbac/v1alpha/rbac.proto) | `DELETE /v1/roles/{role_id}/permissions/{permission_id}` | `RevokePermissionFromRole` | JWT + `manage_roles` | API only |
 | [rbac](../service/rbac/pb/rbac/v1alpha/rbac.proto) | `GET /v1/roles/{role_id}/permissions` | `GetRolePermissions` | JWT + `view_roles` | API only |
-| [rbac](../service/rbac/pb/rbac/v1alpha/rbac.proto) | `POST /v1/users/{user_id}/roles/{role_id}` | `AssignRoleToUser` | Public | API only |
+| [rbac](../service/rbac/pb/rbac/v1alpha/rbac.proto) | `POST /v1/users/{user_id}/roles/{role_id}` | `AssignRoleToUser` | JWT + `manage_roles` | API only |
 | [rbac](../service/rbac/pb/rbac/v1alpha/rbac.proto) | `DELETE /v1/users/{user_id}/roles/{role_id}` | `RevokeRoleFromUser` | JWT + `manage_roles` | API only |
-| [rbac](../service/rbac/pb/rbac/v1alpha/rbac.proto) | `GET /v1/users/{user_id}/roles` | `GetUserRoles` | JWT + `view_user` | API only |
-| [rbac](../service/rbac/pb/rbac/v1alpha/rbac.proto) | `GET /v1/users/{user_id}/role-details` | `GetUserRoleDetails` | JWT + `view_user` | API only |
+| [rbac](../service/rbac/pb/rbac/v1alpha/rbac.proto) | `GET /v1/users/{user_id}/roles` | `GetUserRoles` | JWT + owner/admin scope | API only |
+| [rbac](../service/rbac/pb/rbac/v1alpha/rbac.proto) | `GET /v1/users/{user_id}/role-details` | `GetUserRoleDetails` | JWT + owner/admin scope | API only |
 | [rbac](../service/rbac/pb/rbac/v1alpha/rbac.proto) | `GET /v1/roles/{role_id}/users` | `GetUsersWithRole` | JWT + `view_roles` | API only |
 | [rbac](../service/rbac/pb/rbac/v1alpha/rbac.proto) | `POST /v1/check-permission` | `CheckPermission` | JWT | API only |
 | [rbac](../service/rbac/pb/rbac/v1alpha/rbac.proto) | `POST /v1/check-permission-by-resource-action` | `CheckPermissionByResourceAction` | JWT | API only |
@@ -96,10 +96,10 @@ The nginx image also maps `/api/` and `/rbac/` to the gateway root; e.g. `/api/v
 | [schedule](../service/schedule/pb/schedule/v1alpha/schedule.proto) | `DELETE /v1/schedules/{id}` | `DeleteSchedule` | JWT + `manage_schedule` | API only |
 | [user](../service/user/pb/user/v1alpha/user.proto) | `POST /v1/create_user` | `CreateUser` | Public | Register |
 | [user](../service/user/pb/user/v1alpha/user.proto) | `POST /v1/login_user` | `LoginUser` | Public | Log in |
-| [user](../service/user/pb/user/v1alpha/user.proto) | `GET /v1/users/{user.id}` | `GetUser` | JWT + `view_user` | API only |
-| [user](../service/user/pb/user/v1alpha/user.proto) | `PUT /v1/users/{user.id}` | `UpdateUser` | JWT + `update_user` | API only |
+| [user](../service/user/pb/user/v1alpha/user.proto) | `GET /v1/users/{user.id}` | `GetUser` | JWT + owner/admin scope | API only |
+| [user](../service/user/pb/user/v1alpha/user.proto) | `PUT /v1/users/{user.id}` | `UpdateUser` | JWT + owner/admin scope | API only |
 | [user](../service/user/pb/user/v1alpha/user.proto) | `POST /v1/renew_token` | `RenewAccessToken` | Public | API only |
-| [user](../service/user/pb/user/v1alpha/user.proto) | `DELETE /v1/users/{user.id}` | `DeleteUser` | JWT + `delete_user` | API only |
+| [user](../service/user/pb/user/v1alpha/user.proto) | `DELETE /v1/users/{user.id}` | `DeleteUser` | JWT + owner/admin scope | API only |
 | [user](../service/user/pb/user/v1alpha/user.proto) | `POST /v1/logout_user` | `LogoutUser` | JWT | API only |
 | [user](../service/user/pb/user/v1alpha/user.proto) | `GET /v1/users/{user_id}/trainer_profile` | `GetTrainerProfile` | JWT + `view_user` | API only |
 | [user](../service/user/pb/user/v1alpha/user.proto) | `PUT /v1/trainer_profile` | `UpdateTrainerProfile` | JWT + `update_user` | API only |
@@ -124,7 +124,7 @@ Use fresh customer A/B, trainer A/B, gym owner, administrator, expired-role user
 | Payments / PAY-01/02 | Create pending payment, retry, authorize settlement, refund twice, cross-user read, reconcile revenue | Provider-confirmed state; no duplicate charges; authorized valid refunds; currency-separated totals | Source-only ledger; provider/settlement/idempotency unimplemented |
 | Notifications / NOTIFY-01, EVENT-01 | Booking/cancel event, read inbox, mark own read, change preferences, retry delivery | Transactional event intent; ownership; preferences respected; retry without duplicates | Source-only inbox/preferences; event delivery unimplemented |
 | Activity / AUTHZ-01, UI-05 | Log two workouts, list, compare totals, B requests A | Totals 2/40/200; private records; stats envelope/field names decoded | Automated totals, cross-user read, widget stats; manual invalid units and all write ownership |
-| Reports / REPORT-01/02 | Seed date-boundary bookings and pending/settled/refunded payments across gyms/currencies | Authorized scoped totals reconcile with source; attendance dates honored; completed/no-show transitions exist | Source-only; manual fixture reconciliation; no report UI |
+| Reports / REPORT-01/02 | Seed date-boundary bookings and pending/settled/refunded payments across gyms/currencies | Authorized scoped totals reconcile with source; attendance date filtering requires a contract extension; completed/no-show transitions exist | Source-only; manual fixture reconciliation; no report UI |
 | Web / UI-01/02/04/05/06 | Login, navigate, view/cancel booking, stats, deny/error states, logout; refresh browser | Correct gateway JSON; explicit errors; server logout; documented storage/session expiry behavior | Automated widgets for critical states; manual browser/network/expiry and missing staff screens |
 
 For manual cases record actor, fixture IDs, request/status, before/after DB values, actual result, and requirement/task. Assert rejected writes leave state unchanged. Use service contracts for payload shapes; test missing nested payloads and invalid identifiers across CRUD operations (API-01/02). Payment/provider and notification-delivery cases remain blocked until adapters exist; do not represent stored rows as completed payments or delivered messages.
@@ -140,7 +140,7 @@ service/scripts/validate-business.sh
 (cd ui && flutter analyze --no-pub)
 ```
 
-The API runner requires Docker access (or passwordless `sudo -n docker`), Go, curl and image/build dependency access. It regenerates protobuf/sqlc in a fresh service image using the existing Dockerfile, creates a uniquely named network and PostgreSQL database, applies migrations in order with stop-on-error, and exposes randomized loopback ports. It never uses the deployed database. `POSTGRES_TEST_IMAGE` can override the default PostgreSQL 16 Alpine image. It removes only its own containers/network/image and preserves logs under the printed `/tmp/gj-validation.*` directory. Existing service logging can include fixture credentials; keep those logs local. Expected requirement failures produce a nonzero exit code.
+The API runner requires Docker access (or passwordless `sudo -n docker`), Go, curl and image/build dependency access. It regenerates protobuf/sqlc in a fresh service image using the existing Dockerfile, creates a uniquely named network and PostgreSQL database, applies migrations in order with stop-on-error, validates bootstrap, and tests new migration down/up pairs, and exposes randomized loopback ports. It never uses the deployed database. `POSTGRES_TEST_IMAGE` can override the default PostgreSQL 16 Alpine image. It removes only its own containers/network/image and preserves logs under the printed `/tmp/gj-validation.*` directory. Existing service logging can include fixture credentials; keep those logs local. Any unmet requirement produces a nonzero exit code.
 
 `service/integration` skips when its two validation environment variables are absent; a skipped run is not API validation. Do not point those variables at a shared database. The runner supplies both. Existing `make test` changes local data and prints responses without asserting correctness, so it is not used here.
 
@@ -151,7 +151,7 @@ The source build regenerates bindings inside the container because ignored local
 | Check | Result | Evidence / linked task |
 | --- | --- | --- |
 | Fresh container protobuf/sqlc generation and service compilation | Passed | Existing Dockerfile built current source successfully; host ignored bindings are incompatible (QUALITY-02) |
-| Migrations 000001–000011 on PostgreSQL 16 Alpine | Passed | Isolated runner applied every up migration with `ON_ERROR_STOP=1` |
+| Initial migrations 000001–000011 on PostgreSQL 16 Alpine | Passed | Isolated runner applied every up migration with `ON_ERROR_STOP=1` |
 | Seed permission completeness | Failed, eight missing | manage_gym, view_gym, manage_schedule, view_schedule, create_payment, view_payment, manage_payment, send_notification (RBAC-07) |
 | Customer journey | Passed | Public-field/hash/default role assertions, trainer create/customer browse, booking duplicate 409, persisted cancellation, rebooking, full-class 429, customer create denial 403 and missing booking 404 |
 | Activity totals | Passed | Two 20-minute/100-calorie activities aggregate to 2/40/200 |
@@ -170,9 +170,9 @@ The source build regenerates bindings inside the container because ignored local
 | Canonical `buf lint` | Passed | Exit 0; existing DEFAULT-category deprecation warnings |
 | Runner syntax / patch whitespace | Passed | `bash -n service/scripts/validate-business.sh`; `git diff --check` |
 
-The initial isolated run completed the HTTP suite in 8.94 seconds after building/migrating. Failure assertions remain active and make both requirement suites exit nonzero. No test failure was reclassified as success. Raw output was retained locally at `/tmp/gj-validation.4x6ktU/results.txt`; the durable sanitized evidence is the table above. Existing deployment probes were read-only. No end-to-end browser automation, external payment/delivery integration, or manual cases above have been claimed as passed.
+The initial isolated run completed the HTTP suite in 8.94 seconds after building/migrating. At the initial audit, failure assertions remained active and made both requirement suites exit nonzero; remediation preserves the same assertions. No test failure was reclassified as success. Raw output was retained locally at `/tmp/gj-validation.4x6ktU/results.txt`; the durable sanitized evidence is the table above. Existing deployment probes were read-only. No end-to-end browser automation, external payment/delivery integration, or manual cases above have been claimed as passed.
 
-Canonical package/lint checks were run in the Dockerfile builder stage (rather than modifying local ignored bindings):
+Initial canonical package/lint checks were run in the Dockerfile builder stage (rather than modifying local ignored bindings):
 
 ```bash
 sudo docker build --target builder -f k8s-setup/container/Dockerfile.service -t gj-validation-checks .
@@ -181,4 +181,28 @@ sudo docker run --rm gj-validation-checks buf lint
 sudo docker image rm gj-validation-checks
 ```
 
-The `go test ./...` command is expected to remain nonzero until QUALITY-03 is delivered. The image tag above is temporary validation tooling; use an unused tag if running concurrently. Implementation evidence is in the per-domain protobuf links in the inventory, the matching `service/<domain>/<domain>.go` handlers and DB queries, `service/middleware/{auth,permissions}.go`, migration `000004`, and Flutter `main.dart`/`auth_state.dart`. Report calculations and schedule/payment limitations were reviewed in source, not executed as complete business workflows.
+QUALITY-03 is now delivered: the smoke client uses the declared renewal RPC and signed ID types, and the service Dockerfile runs `go test ./...` on canonical bindings. The image tag above is temporary validation tooling; use an unused tag if running concurrently. Implementation evidence is in the per-domain protobuf links in the inventory, the matching `service/<domain>/<domain>.go` handlers and DB queries, `service/middleware/{auth,permissions}.go`, migration `000004`, and Flutter `main.dart`/`auth_state.dart`. Report calculations and schedule/payment limitations were reviewed in source, not executed as complete business workflows.
+
+
+## Remediation results
+
+The same requirement assertions remain enabled. New tests cover token claims/signing configuration, policy completeness and fail-closed handling, bootstrap, user/profile/notification/payment ownership, account-deletion rollback, class ownership and capacity reductions. Widget tests additionally cover renewal/revocation/failure and late responses. The shared user model no longer imposes registration-only rules on ID-only reads or partial updates; registration/login/update handlers validate their own inputs.
+
+Implemented behavior and remaining limitations are tracked in [specification delivery status](../spec.md#16-remediation-delivery-status). First-admin provisioning and migration prerequisites are in [RBAC notes](../service/RBAC.md). No live database/deployment was changed. Canonical generation is isolated from ignored host bindings.
+
+The initial report incorrectly described attendance date parameters as ignored: `GetAttendanceReportRequest` actually has no date fields. Date-filtered attendance requires an explicit contract extension, and remains planned along with metric/currency definitions.
+
+Final verification after remediation:
+
+| Check | Current result |
+| --- | --- |
+| Pinned protobuf lint and canonical protobuf/sqlc generation | Passed in service image build |
+| Canonical `go test ./...` | Passed, including token/configuration, class-boundary, policy-completeness and fail-closed tests; external-environment tests skip during this package-only check |
+| Operator bootstrap on isolated PostgreSQL | Passed: missing account denied, first administrator granted, subsequent bootstrap refused |
+| Full isolated HTTP suite | Passed: all 10 top-level workflow groups, including previous failure assertions, ownership, account deletion/rollback, capacity reduction and both 16-request booking races |
+| Migrations 000012/000013 down/up round trip | Passed; final permission seeds rechecked afterward |
+| Flutter tests | All 12 passed |
+| Flutter analysis | Passed with no issues |
+| Patch whitespace and runner syntax | Passed |
+
+Final API run: 11.272 seconds after build/migration; local artifacts `/tmp/gj-validation.UsHQTm`. Validation containers, network and temporary image were removed. UI implementation was committed as `27b04f7`, security as `e6d0f9e`, booking integrity as `9a8b23c`, and canonical verification tooling as `b23625c`. Remaining design-dependent features are explicitly pending in the specification.

@@ -25,7 +25,7 @@ The 2026-10-29 validation built the service with fresh container-generated bindi
 | Customer | Browse classes and manage own bookings | Book/read/cancel bookings; read classes |
 | Guest | Read public class information | Read classes |
 
-Roles are additive and may expire. Migration `000004` seeds five roles and 21 permissions (user, class, booking, report, and role/permission groups); it does not assign roles to users. `manage_*` is an ordinary exact-match permission, not a wildcard. Ownership restrictions are intended behavior, not enforced by the global permission model.
+Roles are additive and may expire. Migration `000004` seeds five roles and 21 permissions (user, class, booking, report, and role/permission groups); registration assigns the customer role transactionally; the seed itself does not assign roles to users. Migration `000012` adds eight module permissions and reviewed grants. `manage_*` is an ordinary exact-match permission, not a wildcard. Operation permission and handler ownership checks are separate. Private resources are restricted to their owner or an active super administrator; class creators can inspect their own class bookings. Broader gym-scoped staff access remains pending.
 
 **AUTHZ-01:** Resource handlers shall check both operation permission and ownership/scope. A trainer's class permission shall not permit editing another trainer's class; customers shall not access another customer's bookings.
 
@@ -59,7 +59,7 @@ Request flow: client → HTTP gateway (loopback to gRPC) or gRPC → validator i
 Handlers exist for `CreateUser`, `GetUser`, `UpdateUser` (including password change), `DeleteUser`, `ListTrainers`, `GetTrainerProfile`, and `UpdateTrainerProfile`. Passwords are hashed with bcrypt. Schema is in `service/schema/user.sql`; trainer profiles were added in migration `000007`.
 
 - **USER-01:** Registration uses validated name and contact information. Reconcile the design (email and/or phone) with protobuf validation before release.
-- **USER-02:** Never return or log passwords or hashes. The user constructor logs `DBURL`; remove connection strings from logs.
+- **USER-02:** Never return or log passwords or hashes. Connection strings and credential-bearing registration payloads are no longer logged by service constructors/registration.
 - **USER-03:** Define explicit self-service versus administrator rules for profile lookup, update, and deletion, and verify them with denial tests.
 - **USER-04:** Define contact uniqueness (not enforced in the schema), verification, account status, and deletion/retention policies.
 
@@ -67,9 +67,9 @@ Handlers exist for `CreateUser`, `GetUser`, `UpdateUser` (including password cha
 
 ## 5. Authentication and sessions
 
-`LoginUser` verifies the bcrypt hash, issues a JWT access token (15 min) and refresh token (7 days), and persists a `user.session` row (UUID, refresh token, user agent, client IP, blocked flag, expiry). `RenewAccessToken` issues a new access token from a refresh token with roles in claims. `LogoutUser` blocks the session. Signing uses HS256-style secret from `JWT_SECRET`, defaulting to a development value.
+`LoginUser` verifies the bcrypt hash, issues a session-bound JWT access token (15 min) and refresh token (7 days) with distinct token purposes, and persists a `user.session` row (UUID, refresh token, user agent, client IP, blocked flag, expiry). `RenewAccessToken` verifies the persisted refresh token and active session before issuing access. `LogoutUser` checks session ownership and blocks the session; subsequent access and renewal fail. Signing requires HS256, the expected issuer/subject/expiry/purpose, and a session ID. Startup requires a dedicated `JWT_SECRET` of at least 32 bytes unless `APP_ENV=development` explicitly enables the development fallback. Existing tokens without the new claims require login again.
 
-The interceptor reads the token from `authorization`, `grpcgateway-authorization`, or `grpc-metadata-authorization` metadata. Public methods: `LoginUser`, `CreateUser`, `RenewAccessToken`, `GetRoleByName`, `AssignRoleToUser`.
+The interceptor reads the token from `authorization`, `grpcgateway-authorization`, or `grpc-metadata-authorization` metadata. Public methods: `LoginUser`, `CreateUser`, `RenewAccessToken`, `GetRoleByName`. Customer provisioning occurs inside the account transaction; administrative role grants require authentication and `manage_roles`. The database-operator bootstrap command is documented in [RBAC notes](service/RBAC.md).
 
 - **AUTH-01:** Fail startup (or refuse non-dev mode) when `JWT_SECRET` is the default value.
 - **AUTH-02:** Verify session state (blocked/expired) on protected requests and renewal, not only token signature and expiry. Confirm renewal rejects blocked sessions.
@@ -93,7 +93,7 @@ The interceptor reads the token from `authorization`, `grpcgateway-authorization
 
 `rbac` declares 23 RPCs, all with handlers: role and permission CRUD (including by-name lookup), role-permission assign/revoke/list, user-role assign/revoke/list/details/users-with-role, and `CheckPermission`, `CheckPermissionByResourceAction`, `GetUserPermissions`. Tables are `rbac.role`, `rbac.permission`, `rbac.role_permission`, `rbac.user_role` (migration `000003`). Effective permissions are the distinct union of roles whose `expires_at` has not passed; an expired-role cleanup query exists without a scheduler.
 
-`middleware/permissions.go` maps full gRPC method names to permission names; unmapped methods require authentication only. `AuthInterceptor` is wired in `service.go`; the service also holds an internal loopback client to RBAC, and the user module receives an RBAC client via `SetRBACClient`.
+`middleware/permissions.go` maps full gRPC method names to permission names; unmapped methods are denied, while deliberately authenticated-only methods have explicit empty policies. `AuthInterceptor` is wired in `service.go`; the service also holds an internal loopback client to RBAC, and the user module provisions the default customer role directly in the registration transaction; there is no unauthenticated internal role-grant endpoint.
 
 - **RBAC-01:** Preserve additive evaluation, duplicate-safe assignments, and expiry filtering; validate target users, roles, permissions, and grantors (no foreign keys to users today).
 - **RBAC-02:** Document and implement an administrator bootstrap procedure.
@@ -106,7 +106,7 @@ The interceptor reads the token from `authorization`, `grpcgateway-authorization
 
 ## 8. Booking, gyms, and scheduling
 
-**Booking:** `CreateBooking`, `CancelBooking`, `GetBooking`, `ListUserBookings`, `ListClassBookings` (migration `000005`). No waitlist exists.
+**Booking:** `CreateBooking`, `CancelBooking`, `GetBooking`, `ListUserBookings`, `ListClassBookings` (migration `000005`). Confirmation, cancellation and capacity changes serialize on the class row; a partial unique index prevents duplicate confirmed user/class bookings. No waitlist exists.
 
 - **BOOK-01:** Booking confirmation and capacity accounting shall be atomic; concurrent requests never exceed class maximum.
 - **BOOK-02:** Prevent duplicate active bookings per user/class; retried calls shall not double-count.
@@ -153,7 +153,7 @@ The interceptor reads the token from `authorization`, `grpcgateway-authorization
 
 **DATA-01:** PostgreSQL is authoritative. Capacity and room-conflict rules must be transactional.
 
-**DATA-02:** All migrations form one ordered stream in `service/mig/` (`000001`–`000011`). `service/schema/*.sql` is the committed sqlc source regenerated from DBML via `make dbsch`; keep it in step with migrations.
+**DATA-02:** All migrations form one ordered stream in `service/mig/` (`000001`–`000013`). `service/schema/*.sql` is the committed sqlc source regenerated from DBML via `make dbsch`; keep it in step with migrations.
 
 ## 12. Deployment, operations, and quality
 
@@ -171,7 +171,7 @@ Tooling: Go, Buf, sqlc, golang-migrate, PostgreSQL; Podman images from `k8s-setu
 
 - Backend: `make bufgen dbsql`, `make buflint`, build; `make test` boots the service and runs `cmd/grpcclt.go` and `cmd/httpclt.sh` against local PostgreSQL. These smoke clients create data and mostly print responses; they are not assertion-based. Assertion-based Go HTTP integration tests now live in `service/integration/`, with the isolated runner `service/scripts/validate-business.sh`; no coverage threshold is configured.
 - Flutter: `flutter pub get`, `flutter analyze`, `flutter test`.
-- Runtime validation: the fresh container build and migrations succeeded; the customer booking/cancellation journey, activity totals, ordinary auth rejection, role expiry/revocation, and expired access-token rejection passed. Security, validation, duplicate-booking concurrency, and UI failures are tracked in section 15. A single passing last-seat race does not establish atomic capacity enforcement. Host `go test ./...` is blocked by stale ignored generated bindings; regenerate canonically rather than editing them. Canonical `go test ./...` additionally exposes smoke-client compilation failures (QUALITY-03); canonical protobuf lint and Flutter analysis pass.
+- Runtime validation and historical failures are recorded in the [validation report](docs/business-process-validation.md). The remediation adds canonical package checks, bootstrap/ownership tests, booking serialization/constraints and UI session regressions. Host ignored bindings still require canonical regeneration; the container build runs protobuf lint, generation and `go test ./...` without modifying those local files.
 
 **Proposed next steps:**
 
@@ -188,7 +188,7 @@ Each delivered module shall include contract/schema updates, migrations, permiss
 
 - Single-gym versus multi-gym scope and ownership model.
 - Contact requirements and uniqueness, verification, account deletion, and retention.
-- Token transport, rotation, and administrator bootstrap.
+- Token transport and refresh-token rotation; first-administrator bootstrap is now implemented.
 - Class lifecycle, minimum attendance, booking cutoffs, waitlist, and cancellation policies.
 - Room ownership, recurrence, scheduling timezone, and conflict resolution.
 - Payment provider and refund policy; notification channels and preferences.
@@ -199,7 +199,7 @@ Subscriptions/memberships billing and social features have no concrete contracts
 
 ## 15. Validated gaps and implementation tasks (2026-10-29)
 
-The [validation report](docs/business-process-validation.md) lists all 70 HTTP operations, six client screens, test cases, and observed outcomes. The business workflow is the acceptance boundary: an existing CRUD handler does not establish safe authorization, a valid lifecycle, or delivery of external effects. Tests intentionally assert the required behavior and fail until the corresponding work is delivered. Application feature fixes are pending; this revision adds validation and tasks.
+The [validation report](docs/business-process-validation.md) lists all 70 HTTP operations, six client screens, test cases, and observed outcomes. The business workflow is the acceptance boundary: an existing CRUD handler does not establish safe authorization, a valid lifecycle, or delivery of external effects. Tests intentionally assert the required behavior and fail until the corresponding work is delivered. The initial audit evidence below is historical. Completed remediation and remaining work are distinguished in the delivery status in section 16.
 
 Priorities: **P0** authorization/session integrity; **P1** correctness and operationally usable workflows; **P2** planned capabilities. Preserve these IDs when implementing work. Existing requirement IDs below are expanded rather than superseded.
 
@@ -218,9 +218,24 @@ Priorities: **P0** authorization/session integrity; **P1** correctness and opera
 | ROOM-01/02 | P1 conflicts, P2 recurrence; schedules have no room/resource identity or occurrence generation | Define resource ownership/model, add contract/schema/migrations and atomic overlap prevention. Decide timezone/recurrence policy before occurrence generation. | Same-resource overlaps cannot both commit; adjacent half-open intervals pass if adopted; concurrent tests and timezone/DST recurrence cases pass. |
 | PAY-01, **PAY-02: settlement and financial lifecycle** | P1; create inserts ledger row; refund only changes status | Define amount/currency/refund rules and provider adapter, idempotency and verified settlement events. Restrict transitions/refunds and associate payment with the purchased booking/membership where required by the chosen product policy. | Retried requests cannot charge twice; pending rows cannot be treated as settled revenue; refunds require valid state/authority; provider failures cannot falsely record success. |
 | NOTIFY-01, EVENT-01 | P2; inbox exists, event-triggered delivery does not | Choose channels/reminder policies; implement transactional outbox, preferences, delivery workers, retry and duplicate suppression; scope inbox/read/preferences by actor. | Booking/cancellation commits notification intent atomically; opted-out channels are respected; retries deliver at most one logical notification; users cannot inspect/modify others' inboxes. |
-| REPORT-01, **REPORT-02: measurable operational reporting** | P1; source counts non-refunded pending payments and global bookings; attendance request dates are unused | Define timezone/status/currency/tenant metrics, filter attendance by requested dates, reconcile revenue with settled/refunded source records, and implement authorized attendance transitions. Depends on PAY-02 and lifecycle decisions. | Boundary/date/scoping fixtures reconcile with database; pending payments are excluded from settled revenue; currencies are not silently summed; completed/no-show totals are reachable and correct. |
+| REPORT-01, **REPORT-02: measurable operational reporting** | P1; source counts non-refunded pending payments and global bookings; the attendance request has no date filters | Define timezone/status/currency/tenant metrics, filter attendance by requested dates, reconcile revenue with settled/refunded source records, and implement authorized attendance transitions. Depends on PAY-02 and lifecycle decisions. | Boundary/date/scoping fixtures reconcile with database; pending payments are excluded from settled revenue; currencies are not silently summed; completed/no-show totals are reachable and correct. |
 | UI-01/04 | P2; no staff/admin management screens | Add trainer/owner classes, schedules, gym membership, payments/notification/report views as their workflows become usable; add admin role/permission/expiry UI after P0 authorization work. | Each supported actor completes its workflow through the browser; hidden controls do not replace server denial; screens cover loading/empty/error states. |
 | **QUALITY-03: smoke-client contract compatibility** | P1; canonical `go test ./...` fails in `service/cmd/grpcclt.go` | Replace the removed RenewAccessTokenClient helper with the declared RenewAccessToken RPC and use int32 IDs consistent with the protobuf contracts. Keep secrets out of client output. | The smoke client compiles after canonical generation; all packages pass compilation under `go test ./...`; renewal uses the declared request/response contract. |
 | **QUALITY-02: reproducible generated-code checks**, OPS-04 | P1; host generated files fail compilation, canonical container generation builds | Document/automate clean generation and checks without committing bindings; maintain module lists; run integration requirements and UI regression checks in a disposable environment and retain sanitized results. | Clean checkout builds after canonical generation; Go checks, protobuf lint and Flutter analysis have reported results; failed requirements remain visible and link to tasks, rather than being disabled. |
 
 Existing proposed product policies remain decisions, not implemented guarantees: gym tenancy, waitlist cutoffs, recurrence semantics, provider/channel selection and report definitions require resolution before their features are delivered. No live database was changed by this validation.
+
+
+## 16. Remediation delivery status
+
+Implemented and covered by regression tests:
+
+- **AUTH-01/02/03/05, RBAC-02/07/08:** Explicit signing configuration; session-bound access/refresh purposes; persisted-session validation on access and renewal; owned-session logout; authenticated role grants with verified grantor; transactional customer provisioning; database-operator first-admin bootstrap; complete permission seeds and default-deny policies. A policy-completeness test checks every declared RPC.
+- **CLASS-01/02, BOOK-01/02/04:** UTC calendar/time and capacity validation; creator checks; owned/admin class updates; capacity reductions checked against confirmed bookings under the same class lock used by booking and cancellation. Active user/class booking uniqueness is enforced in PostgreSQL. Broader gym tenancy, waitlists and lifecycle transitions remain open.
+- **USER-03 and AUTHZ-01 (partial):** Self-service profile reads/updates and guarded account deletion work with per-handler validation. Private activities, notifications/preferences, payment records and RBAC introspection require ownership/admin scope. Class creators can inspect their own class bookings. Gym member administration checks the gym owner; global reports require system-admin scope until tenant reports are implemented. Deleting an account with retained business records fails atomically, preserving its sessions/roles. Full retention policy and gym-scoped staff delegation remain open.
+- **UI-05/06 and UI-02 (partial):** Canonical enum/nested-stat decoding, visible class/booking permission errors, session-ID retention, server logout, automatic renewal with one retry, shared renewal requests and late-response protection. Loading/error handling in other screens and secure persistent token storage remain open.
+- **QUALITY-02/03:** The Docker service build runs pinned protobuf lint, canonical generation, and all Go package tests; the smoke client compiles against the current RPC/ID types. The isolated runner verifies bootstrap, HTTP workflows and migration round trips. Schema generation preserves constraints not representable by DBML through explicit overlays. Smoke-client privileged workflows still require correctly provisioned test actors; compilation is not proof its entire scenario can run as an unprivileged new customer.
+
+Upgrade requirements: apply migrations `000012` and `000013`; review duplicate confirmed bookings and invalid class ranges/capacities before `000013` (the migration refuses invalid data rather than altering customer records). Configure a dedicated signing secret; old tokens require login. Provision the first administrator through the operator command, then use authenticated grants. No live deployment or database is changed automatically by this work.
+
+Still planned: refresh-token rotation/replay detection and password-change revocation; gym-scoped staff/tenant workflows; waitlists/class lifecycle/attendance; room/resource conflict and recurrence models; external payment settlement/refund rules; notification delivery/outbox/reminders; currency-aware/date-filtered report contracts; and missing trainer/owner/admin screens. These require the dependencies and product decisions already listed above and are not represented as completed by CRUD handlers.
