@@ -13,6 +13,7 @@ import (
 	rbacv1alpha "github.com/ghfli/gym-jinni/service/gen/go/rbac/v1alpha"
 	reportv1alpha "github.com/ghfli/gym-jinni/service/gen/go/report/v1alpha"
 	userv1alpha "github.com/ghfli/gym-jinni/service/gen/go/user/v1alpha"
+	"google.golang.org/genproto/googleapis/type/datetime"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
@@ -82,8 +83,8 @@ func run() error {
 	}
 	log.Println("UpdateUser OK")
 
-	// --- RenewAccessToken (public, via package-level helper) ---
-	renewResp, err := userv1alpha.RenewAccessTokenClient(ctx, conn, &userv1alpha.RenewAccessTokenRequest{
+	// --- RenewAccessToken (public) ---
+	renewResp, err := usc.RenewAccessToken(ctx, &userv1alpha.RenewAccessTokenRequest{
 		RefreshTkn: loginResp.GetRefreshTkn(),
 	})
 	if err != nil {
@@ -126,8 +127,10 @@ func run() error {
 	clsc := classv1alpha.NewClassServiceClient(conn)
 	classResp, err := clsc.CreateClass(authed, &classv1alpha.CreateClassRequest{
 		Class: &classv1alpha.Class{
-			CreatedBy:   uint32(userID),
+			CreatedBy:   userID,
 			Description: "Yoga 101",
+			StartTime:   &datetime.DateTime{Year: 2030, Month: 1, Day: 1, Hours: 10},
+			EndTime:     &datetime.DateTime{Year: 2030, Month: 1, Day: 1, Hours: 11},
 			MinHdcnt:    1,
 			MaxHdcnt:    20,
 		},

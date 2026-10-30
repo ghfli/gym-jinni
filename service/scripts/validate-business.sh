@@ -22,7 +22,7 @@ trap cleanup EXIT
   -p 127.0.0.1::5432 "${POSTGRES_TEST_IMAGE:-postgres:16-alpine}" >/dev/null
 ready=false
 for _ in {1..60}; do
-  if "${docker_cmd[@]}" exec "$run_id-db" pg_isready -U validation -d validation >/dev/null 2>&1; then ready=true; break; fi
+  if "${docker_cmd[@]}" exec "$run_id-db" pg_isready -h 127.0.0.1 -U validation -d validation >/dev/null 2>&1; then ready=true; break; fi
   sleep 1
 done
 $ready || { echo 'PostgreSQL readiness timed out' >&2; exit 1; }
@@ -44,4 +44,11 @@ $ready || { echo 'Service readiness timed out' >&2; exit 1; }
 export VALIDATION_HTTP_BASE="http://$api_port"
 export VALIDATION_DBURL="postgresql://validation:validation@$db_port/validation?sslmode=disable"
 export VALIDATION_JWT_SECRET="$run_id-secret"
+go test -count=1 -v ./cmd/bootstrap-admin 2>&1 | tee "$artifacts/bootstrap.txt"
 go test -count=1 -v ./integration 2>&1 | tee "$artifacts/results.txt"
+
+# Verify forward/down pairs against disposable data, then restore the final schema.
+for migration in mig/000013_*.down.sql mig/000012_*.down.sql mig/000012_*.up.sql mig/000013_*.up.sql; do
+  "${docker_cmd[@]}" exec -i "$run_id-db" psql -v ON_ERROR_STOP=1 -U validation -d validation < "$migration" > /dev/null
+done
+go test -count=1 -v -run TestSeedPermissions ./integration 2>&1 | tee "$artifacts/migration-roundtrip.txt"
