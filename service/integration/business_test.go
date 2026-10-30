@@ -262,7 +262,7 @@ func TestSessionRequirements(t *testing.T) {
 				t.Setenv("JWT_SECRET", secret)
 				previous := auth.AccessTokenDuration
 				auth.AccessTokenDuration = -time.Minute
-				token, _, err := auth.GenerateAccessToken(int32(a.id), nil)
+				token, _, err := auth.GenerateAccessToken(int32(a.id), nil, a.session)
 				auth.AccessTokenDuration = previous
 				if err != nil {
 					t.Fatal(err)
@@ -344,4 +344,88 @@ func TestConcurrentBookings(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestPrivateResourceOwnership(t *testing.T) {
+	s := setup(t)
+	a, b, admin := s.user(), s.user(), s.user()
+	s.role(admin, "super_admin")
+	s.expect("GET", fmt.Sprintf("/v1/users/%d", a.id), a.token, nil, 200)
+	s.expect("GET", fmt.Sprintf("/v1/users/%d", b.id), a.token, nil, 403)
+	s.expect("PUT", fmt.Sprintf("/v1/users/%d", a.id), a.token, map[string]any{"user": map[string]any{"id": a.id, "name": "Updated"}}, 200)
+	s.expect("PUT", fmt.Sprintf("/v1/users/%d", b.id), a.token, map[string]any{"user": map[string]any{"id": b.id, "name": "Spoofed"}}, 403)
+	var name string
+	if err := s.db.QueryRow(`SELECT name FROM "user"."user" WHERE id=$1`, b.id).Scan(&name); err != nil {
+		t.Fatal(err)
+	}
+	if name != "Validation" {
+		t.Fatal("denied profile update changed data")
+	}
+	for _, path := range []string{fmt.Sprintf("/v1/users/%d/permissions", b.id), fmt.Sprintf("/v1/users/%d/notification_preferences", b.id), fmt.Sprintf("/v1/users/%d/notifications", b.id)} {
+		s.expect("GET", path, a.token, nil, 403)
+	}
+	s.expect("POST", "/v1/activities", a.token, map[string]any{"user_id": b.id, "activity_type": "run", "title": "Spoofed"}, 403)
+	activity := s.expect("POST", "/v1/activities", b.token, map[string]any{"user_id": b.id, "activity_type": "run", "title": "Private"}, 200)["activity"].(map[string]any)
+	s.expect("GET", fmt.Sprintf("/v1/activities/%d", int(activity["id"].(float64))), a.token, nil, 403)
+	s.expect("POST", "/v1/logout_user", a.token, map[string]string{"session_id": b.session}, 403)
+	s.expect("GET", "/v1/classes", b.token, nil, 200)
+	note := s.expect("POST", "/v1/notifications", admin.token, map[string]any{"user_id": b.id, "type": "test", "title": "Private"}, 200)["notification"].(map[string]any)
+	path := fmt.Sprintf("/v1/notifications/%d/read", int(note["id"].(float64)))
+	s.expect("POST", path, a.token, nil, 403)
+	s.expect("POST", path, b.token, nil, 200)
+	payment := s.expect("POST", "/v1/payments", admin.token, map[string]any{"user_id": b.id, "amount": 100, "currency": "usd", "payment_type": "class"}, 200)["payment"].(map[string]any)
+	// Grant A only read operation permission; scope must still deny another user's record.
+	_, err := s.db.Exec(`INSERT INTO rbac.role(name) VALUES($1)`, fmt.Sprintf("payment-reader-%d", a.id))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = s.db.Exec(`INSERT INTO rbac.role_permission(role_id,permission_id) SELECT r.id,p.id FROM rbac.role r CROSS JOIN rbac.permission p WHERE r.name=$1 AND p.name='view_payment'`, fmt.Sprintf("payment-reader-%d", a.id))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.role(a, fmt.Sprintf("payment-reader-%d", a.id))
+	s.expect("GET", fmt.Sprintf("/v1/payments/%d", int(payment["id"].(float64))), a.token, nil, 403)
+	s.expect("POST", "/v1/renew_token", "", map[string]string{"refresh_tkn": a.refresh}, 200)
+	s.expect("POST", "/v1/logout_user", a.token, map[string]string{"session_id": a.session}, 200)
+	s.expect("GET", "/v1/classes", a.token, nil, 401)
+}
+
+func TestClassOwnershipAndCapacity(t *testing.T) {
+	s := setup(t)
+	trainer, other, customer := s.user(), s.user(), s.user()
+	s.role(trainer, "trainer")
+	s.role(other, "trainer")
+	c := s.class(trainer, 2)
+	for i := 0; i < 2; i++ {
+		u := customer
+		if i == 1 {
+			u = s.user()
+		}
+		s.expect("POST", "/v1/bookings", u.token, map[string]int{"user_id": u.id, "class_id": c}, 200)
+	}
+	update := map[string]any{"class": map[string]any{"id": c, "description": "Updated", "start_time": map[string]int{"year": 2030, "month": 1, "day": 1, "hours": 10}, "end_time": map[string]int{"year": 2030, "month": 1, "day": 1, "hours": 11}, "max_hdcnt": 1}}
+	s.expect("PUT", fmt.Sprintf("/v1/classes/%d", c), other.token, update, 403)
+	s.expect("PUT", fmt.Sprintf("/v1/classes/%d", c), trainer.token, update, 400)
+	s.expect("GET", fmt.Sprintf("/v1/classes/%d/bookings", c), other.token, nil, 403)
+	s.expect("GET", fmt.Sprintf("/v1/classes/%d/bookings", c), trainer.token, nil, 200)
+	var max int
+	if err := s.db.QueryRow(`SELECT max_hdcnt FROM "class"."class" WHERE id=$1`, c).Scan(&max); err != nil {
+		t.Fatal(err)
+	}
+	if max != 2 {
+		t.Fatal("failed capacity update changed class")
+	}
+}
+
+func TestAccountDeletion(t *testing.T) {
+	s := setup(t)
+	a, b := s.user(), s.user()
+	s.expect("DELETE", fmt.Sprintf("/v1/users/%d", b.id), a.token, nil, 403)
+	s.expect("DELETE", fmt.Sprintf("/v1/users/%d", a.id), a.token, nil, 200)
+	s.expect("GET", "/v1/classes", a.token, nil, 401)
+	s.expect("GET", "/v1/classes", b.token, nil, 200)
+	// A retained activity must prevent deletion without removing sessions/roles.
+	s.expect("POST", "/v1/activities", b.token, map[string]any{"user_id": b.id, "activity_type": "run", "title": "Retained"}, 200)
+	s.expect("DELETE", fmt.Sprintf("/v1/users/%d", b.id), b.token, nil, 400)
+	s.expect("GET", "/v1/classes", b.token, nil, 200)
 }

@@ -3,6 +3,7 @@ package payment
 import (
 	"context"
 	"database/sql"
+	"github.com/ghfli/gym-jinni/service/middleware"
 	"log"
 	"os"
 	"time"
@@ -22,10 +23,9 @@ type ImPaymentServiceServer struct {
 
 func NewImPaymentServiceServer() (*ImPaymentServiceServer, error) {
 	dburl := os.Getenv("DBURL")
-	log.Println("DBURL", dburl)
 	db, err := sql.Open("pgx", dburl)
 	if err != nil {
-		log.Printf("Failed to open DBURL %s: %v", dburl, err)
+		log.Printf("Failed to open database: %v", err)
 		return &ImPaymentServiceServer{}, err
 	}
 	return &ImPaymentServiceServer{
@@ -69,6 +69,9 @@ func paymentToProto(p PaymentPayment) *Payment {
 }
 
 func (s *ImPaymentServiceServer) CreatePayment(ctx context.Context, req *CreatePaymentRequest) (*CreatePaymentResponse, error) {
+	if err := middleware.RequireOwnerOrAdmin(ctx, s.db, req.GetUserId()); err != nil {
+		return nil, err
+	}
 	log.Printf("CreatePayment: user=%d amount=%d currency=%s type=%s", req.GetUserId(), req.GetAmount(), req.GetCurrency(), req.GetPaymentType())
 
 	currency := req.GetCurrency()
@@ -98,10 +101,16 @@ func (s *ImPaymentServiceServer) GetPayment(ctx context.Context, req *GetPayment
 		}
 		return nil, status.Errorf(codes.Internal, "get payment: %v", err)
 	}
+	if err := middleware.RequireOwnerOrAdmin(ctx, s.db, row.UserID); err != nil {
+		return nil, err
+	}
 	return &GetPaymentResponse{Payment: paymentToProto(row)}, nil
 }
 
 func (s *ImPaymentServiceServer) ListPayments(ctx context.Context, req *ListPaymentsRequest) (*ListPaymentsResponse, error) {
+	if err := middleware.RequireOwnerOrAdmin(ctx, s.db, req.GetUserId()); err != nil {
+		return nil, err
+	}
 	rows, err := s.q.ListUserPayments(ctx, req.GetUserId())
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "list payments: %v", err)
@@ -122,6 +131,9 @@ func (s *ImPaymentServiceServer) RefundPayment(ctx context.Context, req *RefundP
 			return nil, status.Errorf(codes.NotFound, "payment %d not found", req.GetId())
 		}
 		return nil, status.Errorf(codes.Internal, "get payment: %v", err)
+	}
+	if err := middleware.RequireOwnerOrAdmin(ctx, s.db, existing.UserID); err != nil {
+		return nil, err
 	}
 	if existing.Status == "refunded" {
 		return nil, status.Errorf(codes.FailedPrecondition, "payment already refunded")

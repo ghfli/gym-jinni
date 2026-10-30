@@ -3,6 +3,7 @@ package notification
 import (
 	"context"
 	"database/sql"
+	"github.com/ghfli/gym-jinni/service/middleware"
 	"log"
 	"os"
 	"time"
@@ -22,10 +23,9 @@ type ImNotificationServiceServer struct {
 
 func NewImNotificationServiceServer() (*ImNotificationServiceServer, error) {
 	dburl := os.Getenv("DBURL")
-	log.Println("DBURL", dburl)
 	db, err := sql.Open("pgx", dburl)
 	if err != nil {
-		log.Printf("Failed to open DBURL %s: %v", dburl, err)
+		log.Printf("Failed to open database: %v", err)
 		return &ImNotificationServiceServer{}, err
 	}
 	return &ImNotificationServiceServer{
@@ -94,6 +94,9 @@ func (s *ImNotificationServiceServer) SendNotification(ctx context.Context, req 
 }
 
 func (s *ImNotificationServiceServer) ListNotifications(ctx context.Context, req *ListNotificationsRequest) (*ListNotificationsResponse, error) {
+	if err := middleware.RequireOwnerOrAdmin(ctx, s.db, req.GetUserId()); err != nil {
+		return nil, err
+	}
 	rows, err := s.q.ListUserNotifications(ctx, req.GetUserId())
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "list notifications: %v", err)
@@ -106,14 +109,29 @@ func (s *ImNotificationServiceServer) ListNotifications(ctx context.Context, req
 }
 
 func (s *ImNotificationServiceServer) MarkRead(ctx context.Context, req *MarkReadRequest) (*MarkReadResponse, error) {
-	log.Printf("MarkRead: id=%d", req.GetId())
-	if err := s.q.MarkNotificationRead(ctx, req.GetId()); err != nil {
-		return nil, status.Errorf(codes.Internal, "mark read: %v", err)
+	actor, err := middleware.GetUserIDFromContext(ctx)
+	if err != nil {
+		return nil, err
 	}
+	result, err := s.db.ExecContext(ctx, `UPDATE notification.notification SET is_read=true WHERE id=$1 AND user_id=$2`, req.GetId(), actor)
+	if err != nil {
+		return nil, status.Error(codes.Internal, "mark notification read")
+	}
+	count, err := result.RowsAffected()
+	if err != nil {
+		return nil, status.Error(codes.Internal, "mark notification read")
+	}
+	if count != 1 {
+		return nil, status.Error(codes.PermissionDenied, "notification unavailable")
+	}
+
 	return &MarkReadResponse{}, nil
 }
 
 func (s *ImNotificationServiceServer) GetPreferences(ctx context.Context, req *GetPreferencesRequest) (*GetPreferencesResponse, error) {
+	if err := middleware.RequireOwnerOrAdmin(ctx, s.db, req.GetUserId()); err != nil {
+		return nil, err
+	}
 	rows, err := s.q.GetUserPreferences(ctx, req.GetUserId())
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "get preferences: %v", err)
@@ -126,6 +144,9 @@ func (s *ImNotificationServiceServer) GetPreferences(ctx context.Context, req *G
 }
 
 func (s *ImNotificationServiceServer) UpdatePreference(ctx context.Context, req *UpdatePreferenceRequest) (*UpdatePreferenceResponse, error) {
+	if err := middleware.RequireOwnerOrAdmin(ctx, s.db, req.GetUserId()); err != nil {
+		return nil, err
+	}
 	log.Printf("UpdatePreference: user=%d channel=%s enabled=%v", req.GetUserId(), req.GetChannel(), req.GetEnabled())
 
 	row, err := s.q.UpsertPreference(ctx, UpsertPreferenceParams{

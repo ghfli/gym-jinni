@@ -3,6 +3,7 @@ package gym
 import (
 	"context"
 	"database/sql"
+	"github.com/ghfli/gym-jinni/service/middleware"
 	"log"
 	"os"
 	"time"
@@ -22,10 +23,9 @@ type ImGymServiceServer struct {
 
 func NewImGymServiceServer() (*ImGymServiceServer, error) {
 	dburl := os.Getenv("DBURL")
-	log.Println("DBURL", dburl)
 	db, err := sql.Open("pgx", dburl)
 	if err != nil {
-		log.Printf("Failed to open DBURL %s: %v", dburl, err)
+		log.Printf("Failed to open database: %v", err)
 		return &ImGymServiceServer{}, err
 	}
 	return &ImGymServiceServer{
@@ -85,6 +85,16 @@ func membershipToProto(m GymMembership) *Membership {
 func (s *ImGymServiceServer) CreateGym(ctx context.Context, req *CreateGymRequest) (*CreateGymResponse, error) {
 	log.Printf("CreateGym: name=%s owner_id=%d", req.GetName(), req.GetOwnerId())
 
+	actor, err := middleware.GetUserIDFromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if req.GetOwnerId() == 0 {
+		req.OwnerId = actor
+	}
+	if err := middleware.RequireOwnerOrAdmin(ctx, s.db, req.GetOwnerId()); err != nil {
+		return nil, err
+	}
 	row, err := s.q.CreateGym(ctx, CreateGymParams{
 		Name:    req.GetName(),
 		Address: sql.NullString{String: req.GetAddress(), Valid: req.GetAddress() != ""},
@@ -125,7 +135,7 @@ func (s *ImGymServiceServer) ListGyms(ctx context.Context, req *ListGymsRequest)
 func (s *ImGymServiceServer) UpdateGym(ctx context.Context, req *UpdateGymRequest) (*UpdateGymResponse, error) {
 	log.Printf("UpdateGym: id=%d name=%s", req.GetId(), req.GetName())
 
-	_, err := s.q.GetGym(ctx, req.GetId())
+	existing, err := s.q.GetGym(ctx, req.GetId())
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, status.Errorf(codes.NotFound, "gym %d not found", req.GetId())
@@ -133,6 +143,9 @@ func (s *ImGymServiceServer) UpdateGym(ctx context.Context, req *UpdateGymReques
 		return nil, status.Errorf(codes.Internal, "get gym: %v", err)
 	}
 
+	if err := middleware.RequireOwnerOrAdmin(ctx, s.db, existing.OwnerID.Int32); err != nil {
+		return nil, err
+	}
 	row, err := s.q.UpdateGym(ctx, UpdateGymParams{
 		ID:      req.GetId(),
 		Name:    req.GetName(),
@@ -150,7 +163,7 @@ func (s *ImGymServiceServer) UpdateGym(ctx context.Context, req *UpdateGymReques
 func (s *ImGymServiceServer) AddMember(ctx context.Context, req *AddMemberRequest) (*AddMemberResponse, error) {
 	log.Printf("AddMember: gym_id=%d user_id=%d role=%s", req.GetGymId(), req.GetUserId(), req.GetRole())
 
-	_, err := s.q.GetGym(ctx, req.GetGymId())
+	existing, err := s.q.GetGym(ctx, req.GetGymId())
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, status.Errorf(codes.NotFound, "gym %d not found", req.GetGymId())
@@ -158,6 +171,9 @@ func (s *ImGymServiceServer) AddMember(ctx context.Context, req *AddMemberReques
 		return nil, status.Errorf(codes.Internal, "get gym: %v", err)
 	}
 
+	if err := middleware.RequireOwnerOrAdmin(ctx, s.db, existing.OwnerID.Int32); err != nil {
+		return nil, err
+	}
 	role := req.GetRole()
 	if role == "" {
 		role = "member"
@@ -176,6 +192,16 @@ func (s *ImGymServiceServer) AddMember(ctx context.Context, req *AddMemberReques
 }
 
 func (s *ImGymServiceServer) ListMembers(ctx context.Context, req *ListMembersRequest) (*ListMembersResponse, error) {
+	existing, err := s.q.GetGym(ctx, req.GetGymId())
+	if err == sql.ErrNoRows {
+		return nil, status.Error(codes.NotFound, "gym not found")
+	}
+	if err != nil {
+		return nil, status.Error(codes.Internal, "get gym")
+	}
+	if err := middleware.RequireOwnerOrAdmin(ctx, s.db, existing.OwnerID.Int32); err != nil {
+		return nil, err
+	}
 	rows, err := s.q.ListGymMembers(ctx, req.GetGymId())
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "list members: %v", err)

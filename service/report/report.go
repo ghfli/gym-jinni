@@ -3,6 +3,7 @@ package report
 import (
 	"context"
 	"database/sql"
+	"github.com/ghfli/gym-jinni/service/middleware"
 	"log"
 	"os"
 
@@ -19,16 +20,18 @@ type ImReportServiceServer struct {
 
 func NewImReportServiceServer() (*ImReportServiceServer, error) {
 	dburl := os.Getenv("DBURL")
-	log.Println("DBURL", dburl)
 	db, err := sql.Open("pgx", dburl)
 	if err != nil {
-		log.Printf("Failed to open DBURL %s: %v", dburl, err)
+		log.Printf("Failed to open database: %v", err)
 		return &ImReportServiceServer{}, err
 	}
 	return &ImReportServiceServer{db: db}, nil
 }
 
 func (s *ImReportServiceServer) GetDashboard(ctx context.Context, req *GetDashboardRequest) (*GetDashboardResponse, error) {
+	if err := middleware.RequireOwnerOrAdmin(ctx, s.db, 0); err != nil {
+		return nil, err
+	}
 	var totalUsers, totalClasses, totalBookings int32
 	var totalRevenue int64
 
@@ -54,6 +57,9 @@ func (s *ImReportServiceServer) GetDashboard(ctx context.Context, req *GetDashbo
 }
 
 func (s *ImReportServiceServer) GetRevenueReport(ctx context.Context, req *GetRevenueReportRequest) (*GetRevenueReportResponse, error) {
+	if err := middleware.RequireOwnerOrAdmin(ctx, s.db, 0); err != nil {
+		return nil, err
+	}
 	var totalRevenue int64
 	var paymentCount int32
 
@@ -71,6 +77,9 @@ func (s *ImReportServiceServer) GetRevenueReport(ctx context.Context, req *GetRe
 }
 
 func (s *ImReportServiceServer) GetAttendanceReport(ctx context.Context, req *GetAttendanceReportRequest) (*GetAttendanceReportResponse, error) {
+	if err := middleware.RequireOwnerOrAdmin(ctx, s.db, 0); err != nil {
+		return nil, err
+	}
 	var totalBookings, confirmed, cancelled, completed int32
 
 	if err := s.db.QueryRowContext(ctx, `SELECT count(*) FROM booking.booking`).Scan(&totalBookings); err != nil {

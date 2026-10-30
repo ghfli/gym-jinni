@@ -8,6 +8,10 @@ import (
 	"net"
 	"net/http"
 
+	"github.com/ghfli/gym-jinni/service/activity"
+	"github.com/ghfli/gym-jinni/service/auth"
+	"github.com/ghfli/gym-jinni/service/booking"
+	"github.com/ghfli/gym-jinni/service/class"
 	activityv1alpha "github.com/ghfli/gym-jinni/service/gen/go/activity/v1alpha"
 	bookingv1alpha "github.com/ghfli/gym-jinni/service/gen/go/booking/v1alpha"
 	classv1alpha "github.com/ghfli/gym-jinni/service/gen/go/class/v1alpha"
@@ -18,9 +22,6 @@ import (
 	reportv1alpha "github.com/ghfli/gym-jinni/service/gen/go/report/v1alpha"
 	schedulev1alpha "github.com/ghfli/gym-jinni/service/gen/go/schedule/v1alpha"
 	userv1alpha "github.com/ghfli/gym-jinni/service/gen/go/user/v1alpha"
-	"github.com/ghfli/gym-jinni/service/activity"
-	"github.com/ghfli/gym-jinni/service/booking"
-	"github.com/ghfli/gym-jinni/service/class"
 	"github.com/ghfli/gym-jinni/service/gym"
 	"github.com/ghfli/gym-jinni/service/middleware"
 	"github.com/ghfli/gym-jinni/service/notification"
@@ -46,6 +47,9 @@ func main() {
 }
 
 func run() error {
+	if err := auth.ValidateConfiguration(); err != nil {
+		return err
+	}
 	go runGRPCServer()
 	return runGatewayServer()
 }
@@ -95,16 +99,7 @@ func runGRPCServer() error {
 	if err != nil {
 		log.Printf("Warning: could not create RBAC loopback client: %v", err)
 	}
-	// Create a second loopback client without interceptors for internal service calls
-	internalRbacConn, err := grpc.Dial("127.0.0.1:8080",
-		grpc.WithTransportCredentials(insecure.NewCredentials()))
-	if err != nil {
-		log.Printf("Warning: could not create internal RBAC loopback client: %v", err)
-	}
-
 	rbacClient := rbacv1alpha.NewRBACServiceClient(rbacConn)
-	internalRbacClient := rbacv1alpha.NewRBACServiceClient(internalRbacConn)
-	usersvc.SetRBACClient(internalRbacClient)
 
 	classsvc, err := class.NewImClassServiceServer()
 	if err != nil {
@@ -151,7 +146,7 @@ func runGRPCServer() error {
 	server := grpc.NewServer(
 		grpc.UnaryInterceptor(grpc_middleware.ChainUnaryServer(
 			grpc_validator.UnaryServerInterceptor(),
-			middleware.AuthInterceptor(rbacClient),
+			middleware.AuthInterceptor(rbacClient, usersvc.ValidateSession),
 		)))
 	userv1alpha.RegisterUserServiceServer(server, usersvc)
 	rbacv1alpha.RegisterRBACServiceServer(server, rbacsvc)
@@ -179,10 +174,10 @@ func runGatewayServer() error {
 
 	mux := runtime.NewServeMux()
 	opts := []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())}
-	
+
 	// Use 127.0.0.1 for loopback connections since 0.0.0.0 might not work for Dial in all environments
 	loopbackEndpoint := "127.0.0.1:8080"
-	
+
 	if err := userv1alpha.RegisterUserServiceHandlerFromEndpoint(ctx, mux, loopbackEndpoint, opts); err != nil {
 		return err
 	}

@@ -3,6 +3,7 @@ package activity
 import (
 	"context"
 	"database/sql"
+	"github.com/ghfli/gym-jinni/service/middleware"
 	"log"
 	"os"
 	"time"
@@ -22,10 +23,9 @@ type ImActivityServiceServer struct {
 
 func NewImActivityServiceServer() (*ImActivityServiceServer, error) {
 	dburl := os.Getenv("DBURL")
-	log.Println("DBURL", dburl)
 	db, err := sql.Open("pgx", dburl)
 	if err != nil {
-		log.Printf("Failed to open DBURL %s: %v", dburl, err)
+		log.Printf("Failed to open database: %v", err)
 		return &ImActivityServiceServer{}, err
 	}
 	return &ImActivityServiceServer{
@@ -73,6 +73,9 @@ func activityToProto(a ActivityActivity) *Activity {
 }
 
 func (s *ImActivityServiceServer) LogActivity(ctx context.Context, req *LogActivityRequest) (*LogActivityResponse, error) {
+	if err := middleware.RequireOwnerOrAdmin(ctx, s.db, req.GetUserId()); err != nil {
+		return nil, err
+	}
 	log.Printf("LogActivity: user=%d type=%s title=%s", req.GetUserId(), req.GetActivityType(), req.GetTitle())
 
 	row, err := s.q.CreateActivity(ctx, CreateActivityParams{
@@ -100,10 +103,16 @@ func (s *ImActivityServiceServer) GetActivity(ctx context.Context, req *GetActiv
 		}
 		return nil, status.Errorf(codes.Internal, "get activity: %v", err)
 	}
+	if err := middleware.RequireOwnerOrAdmin(ctx, s.db, row.UserID); err != nil {
+		return nil, err
+	}
 	return &GetActivityResponse{Activity: activityToProto(row)}, nil
 }
 
 func (s *ImActivityServiceServer) ListActivities(ctx context.Context, req *ListActivitiesRequest) (*ListActivitiesResponse, error) {
+	if err := middleware.RequireOwnerOrAdmin(ctx, s.db, req.GetUserId()); err != nil {
+		return nil, err
+	}
 	rows, err := s.q.ListUserActivities(ctx, req.GetUserId())
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "list activities: %v", err)
@@ -116,6 +125,9 @@ func (s *ImActivityServiceServer) ListActivities(ctx context.Context, req *ListA
 }
 
 func (s *ImActivityServiceServer) GetStats(ctx context.Context, req *GetStatsRequest) (*GetStatsResponse, error) {
+	if err := middleware.RequireOwnerOrAdmin(ctx, s.db, req.GetUserId()); err != nil {
+		return nil, err
+	}
 	row, err := s.q.GetUserActivityStats(ctx, req.GetUserId())
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "get activity stats: %v", err)

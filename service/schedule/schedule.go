@@ -22,10 +22,9 @@ type ImScheduleServiceServer struct {
 
 func NewImScheduleServiceServer() (*ImScheduleServiceServer, error) {
 	dburl := os.Getenv("DBURL")
-	log.Println("DBURL", dburl)
 	db, err := sql.Open("pgx", dburl)
 	if err != nil {
-		log.Printf("Failed to open DBURL %s: %v", dburl, err)
+		log.Printf("Failed to open database: %v", err)
 		return &ImScheduleServiceServer{}, err
 	}
 	return &ImScheduleServiceServer{
