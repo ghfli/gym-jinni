@@ -11,6 +11,7 @@ import 'package:ui/main.dart';
 AuthState signedIn() => AuthState()
   ..login(
       accessToken: 'access',
+      sessionId: 'session',
       refreshToken: 'refresh',
       userId: 1,
       userName: 'Athlete');
@@ -144,7 +145,10 @@ void main() {
     var revoked = false;
     final auth = signedIn();
     final client = MockClient((request) async {
-      if (request.url.path == '/v1/logout_user') revoked = true;
+      if (request.url.path == '/v1/logout_user') {
+        expect(jsonDecode(request.body)['session_id'], 'session');
+        revoked = true;
+      }
       return jsonResponse({});
     });
     await tester.pumpWidget(harness(const GymJinniApp(), auth, client));

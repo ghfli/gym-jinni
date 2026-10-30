@@ -13,7 +13,8 @@ void main() {
       providers: [
         ChangeNotifierProvider(create: (_) => AuthState()),
         Provider<http.Client>(
-            create: (_) => http.Client(),
+            create: (context) =>
+                SessionClient(context.read<AuthState>(), http.Client()),
             dispose: (_, client) => client.close()),
       ],
       child: const GymJinniApp(),
@@ -241,7 +242,7 @@ class _ClassListPageState extends State<ClassListPage> {
         });
       } else if (resp.statusCode == 403) {
         setState(() {
-          _classes = [];
+          _error = 'Error 403: Permission denied';
           _loading = false;
         });
       } else {
@@ -403,7 +404,7 @@ class _MyBookingsPageState extends State<MyBookingsPage> {
         });
       } else if (resp.statusCode == 403) {
         setState(() {
-          _bookings = [];
+          _error = 'Error 403: Permission denied';
           _loading = false;
         });
       } else {
@@ -465,7 +466,16 @@ class _MyBookingsPageState extends State<MyBookingsPage> {
                         itemCount: _bookings.length,
                         itemBuilder: (_, i) {
                           final b = _bookings[i];
-                          final status = b['status'] ?? 0;
+                          final rawStatus = b['status'];
+                          final status = rawStatus is num
+                              ? rawStatus.toInt()
+                              : const {
+                                    'BOOKING_STATUS_CONFIRMED': 1,
+                                    'BOOKING_STATUS_CANCELLED': 2,
+                                    'BOOKING_STATUS_COMPLETED': 3,
+                                    'BOOKING_STATUS_NO_SHOW': 4
+                                  }[rawStatus] ??
+                                  0;
                           final statusText = status == 1
                               ? 'Confirmed'
                               : status == 2
@@ -548,7 +558,8 @@ class _ActivityPageState extends State<ActivityPage> {
         _activities = (data['activities'] as List?) ?? [];
       }
       if (results[1].statusCode < 300) {
-        _stats = jsonDecode(results[1].body) as Map<String, dynamic>;
+        final data = jsonDecode(results[1].body) as Map<String, dynamic>;
+        _stats = data['stats'] as Map<String, dynamic>?;
       }
     } catch (_) {}
     if (mounted) setState(() => _loading = false);
@@ -605,15 +616,18 @@ class _ActivityPageState extends State<ActivityPage> {
                   child: Row(children: [
                     _StatChip(
                         label: 'Total',
-                        value: '${_stats!['total_count'] ?? 0}'),
+                        value:
+                            '${_stats!['total_count'] ?? _stats!['totalCount'] ?? 0}'),
                     const SizedBox(width: 8),
                     _StatChip(
                         label: 'Minutes',
-                        value: '${_stats!['total_duration'] ?? 0}'),
+                        value:
+                            '${_stats!['total_duration'] ?? _stats!['totalDuration'] ?? 0}'),
                     const SizedBox(width: 8),
                     _StatChip(
                         label: 'Calories',
-                        value: '${_stats!['total_calories'] ?? 0}'),
+                        value:
+                            '${_stats!['total_calories'] ?? _stats!['totalCalories'] ?? 0}'),
                   ]),
                 ),
               Expanded(
@@ -628,11 +642,13 @@ class _ActivityPageState extends State<ActivityPage> {
                             margin: const EdgeInsets.only(bottom: 8),
                             child: ListTile(
                               leading: CircleAvatar(
-                                  child: Icon(
-                                      _activityIcon(a['activity_type'] ?? ''))),
+                                  child: Icon(_activityIcon(
+                                      a['activity_type'] ??
+                                          a['activityType'] ??
+                                          ''))),
                               title: Text(a['title'] ?? 'Activity'),
                               subtitle: Text(
-                                  '${a['duration_minutes'] ?? 0} min | ${a['calories'] ?? 0} cal'),
+                                  '${a['duration_minutes'] ?? a['durationMinutes'] ?? 0} min | ${a['calories'] ?? 0} cal'),
                             ),
                           );
                         },
@@ -783,7 +799,16 @@ class ProfilePage extends StatelessWidget {
               style: theme.textTheme.bodyMedium?.copyWith(color: Colors.grey)),
           const SizedBox(height: 32),
           OutlinedButton.icon(
-            onPressed: () => auth.logout(),
+            onPressed: () async {
+              try {
+                await auth.logout(context.read<http.Client>());
+              } catch (_) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                      content: Text('Logout failed. Please try again.')));
+                }
+              }
+            },
             icon: const Icon(Icons.logout),
             label: const Text('Log out'),
           ),
@@ -903,6 +928,7 @@ class _AuthScreenState extends State<AuthScreen>
             map['user'] is Map ? map['user'] as Map<String, dynamic> : null;
         final auth = context.read<AuthState>();
         auth.login(
+          sessionId: (map['session_id'] ?? map['sessionId'] ?? '').toString(),
           accessToken: (map['access_tkn'] ?? map['accessTkn'] ?? '').toString(),
           refreshToken:
               (map['refresh_tkn'] ?? map['refreshTkn'] ?? '').toString(),
