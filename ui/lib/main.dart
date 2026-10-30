@@ -9,8 +9,13 @@ import 'auth_state.dart';
 
 void main() {
   runApp(
-    ChangeNotifierProvider(
-      create: (_) => AuthState(),
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => AuthState()),
+        Provider<http.Client>(
+            create: (_) => http.Client(),
+            dispose: (_, client) => client.close()),
+      ],
       child: const GymJinniApp(),
     ),
   );
@@ -36,7 +41,8 @@ class GymJinniApp extends StatelessWidget {
         ),
       ),
       home: Consumer<AuthState>(
-        builder: (_, auth, __) => auth.isLoggedIn ? const AppShell() : const AuthScreen(),
+        builder: (_, auth, __) =>
+            auth.isLoggedIn ? const AppShell() : const AuthScreen(),
       ),
     );
   }
@@ -74,11 +80,26 @@ class _AppShellState extends State<AppShell> {
         selectedIndex: _idx,
         onDestinationSelected: (i) => setState(() => _idx = i),
         destinations: const [
-          NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: 'Home'),
-          NavigationDestination(icon: Icon(Icons.fitness_center_outlined), selectedIcon: Icon(Icons.fitness_center), label: 'Classes'),
-          NavigationDestination(icon: Icon(Icons.calendar_today_outlined), selectedIcon: Icon(Icons.calendar_today), label: 'Bookings'),
-          NavigationDestination(icon: Icon(Icons.directions_run_outlined), selectedIcon: Icon(Icons.directions_run), label: 'Activity'),
-          NavigationDestination(icon: Icon(Icons.person_outline), selectedIcon: Icon(Icons.person), label: 'Profile'),
+          NavigationDestination(
+              icon: Icon(Icons.home_outlined),
+              selectedIcon: Icon(Icons.home),
+              label: 'Home'),
+          NavigationDestination(
+              icon: Icon(Icons.fitness_center_outlined),
+              selectedIcon: Icon(Icons.fitness_center),
+              label: 'Classes'),
+          NavigationDestination(
+              icon: Icon(Icons.calendar_today_outlined),
+              selectedIcon: Icon(Icons.calendar_today),
+              label: 'Bookings'),
+          NavigationDestination(
+              icon: Icon(Icons.directions_run_outlined),
+              selectedIcon: Icon(Icons.directions_run),
+              label: 'Activity'),
+          NavigationDestination(
+              icon: Icon(Icons.person_outline),
+              selectedIcon: Icon(Icons.person),
+              label: 'Profile'),
         ],
       ),
     );
@@ -105,16 +126,28 @@ class DashboardPage extends StatelessWidget {
           Text('Welcome, ${auth.userName ?? "Athlete"}!',
               style: theme.textTheme.headlineSmall),
           const SizedBox(height: 24),
-          _SummaryCard(icon: Icons.fitness_center, label: 'Browse Classes', color: Colors.teal,
+          _SummaryCard(
+              icon: Icons.fitness_center,
+              label: 'Browse Classes',
+              color: Colors.teal,
               onTap: () => _switchTab(context, 1)),
           const SizedBox(height: 12),
-          _SummaryCard(icon: Icons.calendar_today, label: 'My Bookings', color: Colors.indigo,
+          _SummaryCard(
+              icon: Icons.calendar_today,
+              label: 'My Bookings',
+              color: Colors.indigo,
               onTap: () => _switchTab(context, 2)),
           const SizedBox(height: 12),
-          _SummaryCard(icon: Icons.directions_run, label: 'Activity', color: Colors.purple,
+          _SummaryCard(
+              icon: Icons.directions_run,
+              label: 'Activity',
+              color: Colors.purple,
               onTap: () => _switchTab(context, 3)),
           const SizedBox(height: 12),
-          _SummaryCard(icon: Icons.person, label: 'Profile', color: Colors.deepOrange,
+          _SummaryCard(
+              icon: Icons.person,
+              label: 'Profile',
+              color: Colors.deepOrange,
               onTap: () => _switchTab(context, 4)),
         ],
       ),
@@ -128,7 +161,11 @@ class DashboardPage extends StatelessWidget {
 }
 
 class _SummaryCard extends StatelessWidget {
-  const _SummaryCard({required this.icon, required this.label, required this.color, required this.onTap});
+  const _SummaryCard(
+      {required this.icon,
+      required this.label,
+      required this.color,
+      required this.onTap});
   final IconData icon;
   final String label;
   final Color color;
@@ -148,7 +185,11 @@ class _SummaryCard extends StatelessWidget {
           child: Row(children: [
             Icon(icon, size: 32, color: color),
             const SizedBox(width: 16),
-            Text(label, style: Theme.of(context).textTheme.titleMedium?.copyWith(color: color)),
+            Text(label,
+                style: Theme.of(context)
+                    .textTheme
+                    .titleMedium
+                    ?.copyWith(color: color)),
             const Spacer(),
             Icon(Icons.arrow_forward_ios, size: 16, color: color),
           ]),
@@ -181,24 +222,41 @@ class _ClassListPageState extends State<ClassListPage> {
   }
 
   Future<void> _fetchClasses() async {
-    setState(() { _loading = true; _error = null; });
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     final auth = context.read<AuthState>();
     try {
-      final resp = await http.get(
+      final resp = await context.read<http.Client>().get(
         Uri.parse('${ApiConfig.baseUrl}/v1/classes'),
         headers: {'Accept': 'application/json', ...auth.authHeaders},
       );
       if (!mounted) return;
       if (resp.statusCode < 300) {
         final data = jsonDecode(resp.body) as Map<String, dynamic>;
-        setState(() { _classes = (data['classes'] as List?) ?? []; _loading = false; });
+        setState(() {
+          _classes = (data['classes'] as List?) ?? [];
+          _loading = false;
+        });
       } else if (resp.statusCode == 403) {
-        setState(() { _classes = []; _loading = false; });
+        setState(() {
+          _classes = [];
+          _loading = false;
+        });
       } else {
-        setState(() { _error = 'Error ${resp.statusCode}: ${resp.body}'; _loading = false; });
+        setState(() {
+          _error = 'Error ${resp.statusCode}: ${resp.body}';
+          _loading = false;
+        });
       }
     } catch (e) {
-      if (mounted) setState(() { _error = '$e'; _loading = false; });
+      if (mounted) {
+        setState(() {
+          _error = '$e';
+          _loading = false;
+        });
+      }
     }
   }
 
@@ -211,7 +269,11 @@ class _ClassListPageState extends State<ClassListPage> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
-              ? Center(child: Padding(padding: const EdgeInsets.all(20), child: Text(_error!, style: const TextStyle(color: Colors.red))))
+              ? Center(
+                  child: Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Text(_error!,
+                          style: const TextStyle(color: Colors.red))))
               : _classes.isEmpty
                   ? const Center(child: Text('No classes available'))
                   : RefreshIndicator(
@@ -261,25 +323,32 @@ class _ClassTile extends StatelessWidget {
         title: const Text('Confirm Booking'),
         content: Text('Book "${cls['description']}"?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Book')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Book')),
         ],
       ),
     );
     if (confirmed != true || !context.mounted) return;
 
     try {
-      final resp = await http.post(
-        Uri.parse('${ApiConfig.baseUrl}/v1/bookings'),
-        headers: {'Content-Type': 'application/json', ...auth.authHeaders},
-        body: jsonEncode({'user_id': auth.userId, 'class_id': classId}),
-      );
+      final resp = await context.read<http.Client>().post(
+            Uri.parse('${ApiConfig.baseUrl}/v1/bookings'),
+            headers: {'Content-Type': 'application/json', ...auth.authHeaders},
+            body: jsonEncode({'user_id': auth.userId, 'class_id': classId}),
+          );
       if (!context.mounted) return;
-      final msg = resp.statusCode < 300 ? 'Booked successfully!' : 'Booking failed: ${resp.body}';
+      final msg = resp.statusCode < 300
+          ? 'Booked successfully!'
+          : 'Booking failed: ${resp.body}';
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Error: $e')));
       }
     }
   }
@@ -308,47 +377,72 @@ class _MyBookingsPageState extends State<MyBookingsPage> {
   }
 
   Future<void> _fetch() async {
-    setState(() { _loading = true; _error = null; });
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     final auth = context.read<AuthState>();
     if (auth.userId == null) {
-      setState(() { _error = 'Not logged in'; _loading = false; });
+      setState(() {
+        _error = 'Not logged in';
+        _loading = false;
+      });
       return;
     }
     try {
-      final resp = await http.get(
+      final resp = await context.read<http.Client>().get(
         Uri.parse('${ApiConfig.baseUrl}/v1/users/${auth.userId}/bookings'),
         headers: {'Accept': 'application/json', ...auth.authHeaders},
       );
       if (!mounted) return;
       if (resp.statusCode < 300) {
         final data = jsonDecode(resp.body) as Map<String, dynamic>;
-        setState(() { _bookings = (data['bookings'] as List?) ?? []; _loading = false; });
+        setState(() {
+          _bookings = (data['bookings'] as List?) ?? [];
+          _loading = false;
+        });
       } else if (resp.statusCode == 403) {
-        setState(() { _bookings = []; _loading = false; });
+        setState(() {
+          _bookings = [];
+          _loading = false;
+        });
       } else {
-        setState(() { _error = 'Error ${resp.statusCode}'; _loading = false; });
+        setState(() {
+          _error = 'Error ${resp.statusCode}';
+          _loading = false;
+        });
       }
     } catch (e) {
-      if (mounted) setState(() { _error = '$e'; _loading = false; });
+      if (mounted) {
+        setState(() {
+          _error = '$e';
+          _loading = false;
+        });
+      }
     }
   }
 
   Future<void> _cancel(int bookingId) async {
     final auth = context.read<AuthState>();
     try {
-      final resp = await http.post(
+      final resp = await context.read<http.Client>().post(
         Uri.parse('${ApiConfig.baseUrl}/v1/bookings/$bookingId/cancel'),
         headers: {'Content-Type': 'application/json', ...auth.authHeaders},
       );
       if (!mounted) return;
       if (resp.statusCode < 300) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Booking cancelled')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('Booking cancelled')));
         _fetch();
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Cancel failed: ${resp.body}')));
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Cancel failed: ${resp.body}')));
       }
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Error: $e')));
+      }
     }
   }
 
@@ -372,19 +466,35 @@ class _MyBookingsPageState extends State<MyBookingsPage> {
                         itemBuilder: (_, i) {
                           final b = _bookings[i];
                           final status = b['status'] ?? 0;
-                          final statusText = status == 1 ? 'Confirmed' : status == 2 ? 'Cancelled' : 'Unknown';
-                          final color = status == 1 ? Colors.green : status == 2 ? Colors.red : Colors.grey;
+                          final statusText = status == 1
+                              ? 'Confirmed'
+                              : status == 2
+                                  ? 'Cancelled'
+                                  : 'Unknown';
+                          final color = status == 1
+                              ? Colors.green
+                              : status == 2
+                                  ? Colors.red
+                                  : Colors.grey;
 
                           return Card(
                             margin: const EdgeInsets.only(bottom: 8),
                             child: ListTile(
-                              leading: CircleAvatar(backgroundColor: color.withValues(alpha: 0.15), child: Icon(Icons.event, color: color)),
-                              title: Text('Class #${b['class_id'] ?? b['classId']}'),
-                              subtitle: Text(statusText, style: TextStyle(color: color, fontWeight: FontWeight.w600)),
+                              leading: CircleAvatar(
+                                  backgroundColor:
+                                      color.withValues(alpha: 0.15),
+                                  child: Icon(Icons.event, color: color)),
+                              title: Text(
+                                  'Class #${b['class_id'] ?? b['classId']}'),
+                              subtitle: Text(statusText,
+                                  style: TextStyle(
+                                      color: color,
+                                      fontWeight: FontWeight.w600)),
                               trailing: status == 1
                                   ? TextButton(
                                       onPressed: () => _cancel(b['id'] as int),
-                                      child: const Text('Cancel', style: TextStyle(color: Colors.red)),
+                                      child: const Text('Cancel',
+                                          style: TextStyle(color: Colors.red)),
                                     )
                                   : null,
                             ),
@@ -423,8 +533,14 @@ class _ActivityPageState extends State<ActivityPage> {
     final auth = context.read<AuthState>();
     try {
       final results = await Future.wait([
-        http.get(Uri.parse('${ApiConfig.baseUrl}/v1/users/${auth.userId}/activities'), headers: auth.authHeaders),
-        http.get(Uri.parse('${ApiConfig.baseUrl}/v1/users/${auth.userId}/activity_stats'), headers: auth.authHeaders),
+        context.read<http.Client>().get(
+            Uri.parse(
+                '${ApiConfig.baseUrl}/v1/users/${auth.userId}/activities'),
+            headers: auth.authHeaders),
+        context.read<http.Client>().get(
+            Uri.parse(
+                '${ApiConfig.baseUrl}/v1/users/${auth.userId}/activity_stats'),
+            headers: auth.authHeaders),
       ]);
       if (!mounted) return;
       if (results[0].statusCode < 300) {
@@ -447,20 +563,25 @@ class _ActivityPageState extends State<ActivityPage> {
 
     final auth = context.read<AuthState>();
     try {
-      final resp = await http.post(
-        Uri.parse('${ApiConfig.baseUrl}/v1/activities'),
-        headers: {'Content-Type': 'application/json', ...auth.authHeaders},
-        body: jsonEncode({...result, 'user_id': auth.userId}),
-      );
+      final resp = await context.read<http.Client>().post(
+            Uri.parse('${ApiConfig.baseUrl}/v1/activities'),
+            headers: {'Content-Type': 'application/json', ...auth.authHeaders},
+            body: jsonEncode({...result, 'user_id': auth.userId}),
+          );
       if (!mounted) return;
       if (resp.statusCode < 300) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Activity logged!')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('Activity logged!')));
         _fetch();
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: ${resp.body}')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Error: ${resp.body}')));
       }
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Error: $e')));
+      }
     }
   }
 
@@ -482,11 +603,17 @@ class _ActivityPageState extends State<ActivityPage> {
                 Padding(
                   padding: const EdgeInsets.all(16),
                   child: Row(children: [
-                    _StatChip(label: 'Total', value: '${_stats!['total_count'] ?? 0}'),
+                    _StatChip(
+                        label: 'Total',
+                        value: '${_stats!['total_count'] ?? 0}'),
                     const SizedBox(width: 8),
-                    _StatChip(label: 'Minutes', value: '${_stats!['total_duration'] ?? 0}'),
+                    _StatChip(
+                        label: 'Minutes',
+                        value: '${_stats!['total_duration'] ?? 0}'),
                     const SizedBox(width: 8),
-                    _StatChip(label: 'Calories', value: '${_stats!['total_calories'] ?? 0}'),
+                    _StatChip(
+                        label: 'Calories',
+                        value: '${_stats!['total_calories'] ?? 0}'),
                   ]),
                 ),
               Expanded(
@@ -500,9 +627,12 @@ class _ActivityPageState extends State<ActivityPage> {
                           return Card(
                             margin: const EdgeInsets.only(bottom: 8),
                             child: ListTile(
-                              leading: CircleAvatar(child: Icon(_activityIcon(a['activity_type'] ?? ''))),
+                              leading: CircleAvatar(
+                                  child: Icon(
+                                      _activityIcon(a['activity_type'] ?? ''))),
                               title: Text(a['title'] ?? 'Activity'),
-                              subtitle: Text('${a['duration_minutes'] ?? 0} min | ${a['calories'] ?? 0} cal'),
+                              subtitle: Text(
+                                  '${a['duration_minutes'] ?? 0} min | ${a['calories'] ?? 0} cal'),
                             ),
                           );
                         },
@@ -514,10 +644,14 @@ class _ActivityPageState extends State<ActivityPage> {
 
   IconData _activityIcon(String type) {
     switch (type) {
-      case 'workout': return Icons.fitness_center;
-      case 'run': return Icons.directions_run;
-      case 'class': return Icons.group;
-      default: return Icons.sports;
+      case 'workout':
+        return Icons.fitness_center;
+      case 'run':
+        return Icons.directions_run;
+      case 'class':
+        return Icons.group;
+      default:
+        return Icons.sports;
     }
   }
 }
@@ -581,15 +715,25 @@ class _LogActivityDialogState extends State<_LogActivityDialog> {
             onChanged: (v) => setState(() => _type = v ?? 'workout'),
           ),
           const SizedBox(height: 8),
-          TextField(controller: _title, decoration: const InputDecoration(labelText: 'Title')),
+          TextField(
+              controller: _title,
+              decoration: const InputDecoration(labelText: 'Title')),
           const SizedBox(height: 8),
-          TextField(controller: _duration, decoration: const InputDecoration(labelText: 'Duration (min)'), keyboardType: TextInputType.number),
+          TextField(
+              controller: _duration,
+              decoration: const InputDecoration(labelText: 'Duration (min)'),
+              keyboardType: TextInputType.number),
           const SizedBox(height: 8),
-          TextField(controller: _calories, decoration: const InputDecoration(labelText: 'Calories'), keyboardType: TextInputType.number),
+          TextField(
+              controller: _calories,
+              decoration: const InputDecoration(labelText: 'Calories'),
+              keyboardType: TextInputType.number),
         ]),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+        TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel')),
         FilledButton(
           onPressed: () => Navigator.pop(context, {
             'activity_type': _type,
@@ -625,13 +769,18 @@ class ProfilePage extends StatelessWidget {
             radius: 48,
             backgroundColor: theme.colorScheme.primaryContainer,
             child: Text(
-              (auth.userName?.isNotEmpty == true ? auth.userName! : '?')[0].toUpperCase(),
-              style: theme.textTheme.headlineLarge?.copyWith(color: theme.colorScheme.onPrimaryContainer),
+              (auth.userName?.isNotEmpty == true ? auth.userName! : '?')[0]
+                  .toUpperCase(),
+              style: theme.textTheme.headlineLarge
+                  ?.copyWith(color: theme.colorScheme.onPrimaryContainer),
             ),
           ),
           const SizedBox(height: 16),
-          Text(auth.userName ?? 'Unknown', textAlign: TextAlign.center, style: theme.textTheme.titleLarge),
-          Text('User #${auth.userId ?? "?"}', textAlign: TextAlign.center, style: theme.textTheme.bodyMedium?.copyWith(color: Colors.grey)),
+          Text(auth.userName ?? 'Unknown',
+              textAlign: TextAlign.center, style: theme.textTheme.titleLarge),
+          Text('User #${auth.userId ?? "?"}',
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodyMedium?.copyWith(color: Colors.grey)),
           const SizedBox(height: 32),
           OutlinedButton.icon(
             onPressed: () => auth.logout(),
@@ -655,7 +804,8 @@ class AuthScreen extends StatefulWidget {
   State<AuthScreen> createState() => _AuthScreenState();
 }
 
-class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateMixin {
+class _AuthScreenState extends State<AuthScreen>
+    with SingleTickerProviderStateMixin {
   late final TabController _tabController;
 
   final _regEmail = TextEditingController();
@@ -688,25 +838,32 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
   }
 
   Future<void> _register() async {
-    setState(() { _busy = true; _message = null; });
+    setState(() {
+      _busy = true;
+      _message = null;
+    });
     try {
-      final resp = await http.post(
-        Uri.parse('${ApiConfig.baseUrl}/v1/create_user'),
-        headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
-        body: jsonEncode({
-          'user': {
-            'email': _regEmail.text.trim(),
-            'phone': _regPhone.text.trim(),
-            'name': _regName.text.trim(),
-            'passwd': _regPass.text,
-          },
-        }),
-      );
+      final resp = await context.read<http.Client>().post(
+            Uri.parse('${ApiConfig.baseUrl}/v1/create_user'),
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json'
+            },
+            body: jsonEncode({
+              'user': {
+                'email': _regEmail.text.trim(),
+                'phone': _regPhone.text.trim(),
+                'name': _regName.text.trim(),
+                'passwd': _regPass.text,
+              },
+            }),
+          );
       if (!mounted) return;
       if (resp.statusCode < 300) {
         final map = jsonDecode(resp.body) as Map<String, dynamic>;
         final user = map['user'] as Map<String, dynamic>?;
-        setState(() => _message = 'Created user id: ${user?['id']}. Switch to Log in.');
+        setState(() =>
+            _message = 'Created user id: ${user?['id']}. Switch to Log in.');
         _tabController.animateTo(1);
       } else {
         setState(() => _message = 'Error ${resp.statusCode}: ${resp.body}');
@@ -719,28 +876,36 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
   }
 
   Future<void> _login() async {
-    setState(() { _busy = true; _message = null; });
+    setState(() {
+      _busy = true;
+      _message = null;
+    });
     try {
-      final resp = await http.post(
-        Uri.parse('${ApiConfig.baseUrl}/v1/login_user'),
-        headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
-        body: jsonEncode({
-          'user': {
-            'email': _loginEmail.text.trim(),
-            'phone': '123456789',
-            'name': 'user',
-            'passwd': _loginPass.text,
-          },
-        }),
-      );
+      final resp = await context.read<http.Client>().post(
+            Uri.parse('${ApiConfig.baseUrl}/v1/login_user'),
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json'
+            },
+            body: jsonEncode({
+              'user': {
+                'email': _loginEmail.text.trim(),
+                'phone': '123456789',
+                'name': 'user',
+                'passwd': _loginPass.text,
+              },
+            }),
+          );
       if (!mounted) return;
       if (resp.statusCode < 300) {
         final map = jsonDecode(resp.body) as Map<String, dynamic>;
-        final userMap = map['user'] is Map ? map['user'] as Map<String, dynamic> : null;
+        final userMap =
+            map['user'] is Map ? map['user'] as Map<String, dynamic> : null;
         final auth = context.read<AuthState>();
         auth.login(
           accessToken: (map['access_tkn'] ?? map['accessTkn'] ?? '').toString(),
-          refreshToken: (map['refresh_tkn'] ?? map['refreshTkn'] ?? '').toString(),
+          refreshToken:
+              (map['refresh_tkn'] ?? map['refreshTkn'] ?? '').toString(),
           userId: int.tryParse(userMap?['id']?.toString() ?? '0') ?? 0,
           userName: (userMap?['name'] ?? '').toString(),
         );
@@ -764,15 +929,24 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
             child: Column(
               children: [
                 const SizedBox(height: 40),
-                Icon(Icons.fitness_center, size: 56, color: Theme.of(context).colorScheme.primary),
+                Icon(Icons.fitness_center,
+                    size: 56, color: Theme.of(context).colorScheme.primary),
                 const SizedBox(height: 8),
-                Text('Gym Jinni', style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold)),
+                Text('Gym Jinni',
+                    style: Theme.of(context)
+                        .textTheme
+                        .headlineMedium
+                        ?.copyWith(fontWeight: FontWeight.bold)),
                 const SizedBox(height: 24),
-                TabBar(controller: _tabController, tabs: const [Tab(text: 'Register'), Tab(text: 'Log in')]),
+                TabBar(
+                    controller: _tabController,
+                    tabs: const [Tab(text: 'Register'), Tab(text: 'Log in')]),
                 if (_message != null)
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                    child: Text(_message!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+                    child: Text(_message!,
+                        style: TextStyle(
+                            color: Theme.of(context).colorScheme.error)),
                   ),
                 Expanded(
                   child: TabBarView(controller: _tabController, children: [
@@ -790,33 +964,63 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
 
   Widget _buildRegisterForm() {
     return ListView(padding: const EdgeInsets.all(20), children: [
-      TextField(controller: _regEmail, decoration: const InputDecoration(labelText: 'Email', prefixIcon: Icon(Icons.email_outlined)),
+      TextField(
+          controller: _regEmail,
+          decoration: const InputDecoration(
+              labelText: 'Email', prefixIcon: Icon(Icons.email_outlined)),
           keyboardType: TextInputType.emailAddress),
       const SizedBox(height: 12),
-      TextField(controller: _regPhone, decoration: const InputDecoration(labelText: 'Phone', prefixIcon: Icon(Icons.phone_outlined)),
+      TextField(
+          controller: _regPhone,
+          decoration: const InputDecoration(
+              labelText: 'Phone', prefixIcon: Icon(Icons.phone_outlined)),
           keyboardType: TextInputType.phone),
       const SizedBox(height: 12),
-      TextField(controller: _regName, decoration: const InputDecoration(labelText: 'Name', prefixIcon: Icon(Icons.person_outline)),
+      TextField(
+          controller: _regName,
+          decoration: const InputDecoration(
+              labelText: 'Name', prefixIcon: Icon(Icons.person_outline)),
           textCapitalization: TextCapitalization.words),
       const SizedBox(height: 12),
-      TextField(controller: _regPass, decoration: const InputDecoration(labelText: 'Password', prefixIcon: Icon(Icons.lock_outline)),
+      TextField(
+          controller: _regPass,
+          decoration: const InputDecoration(
+              labelText: 'Password', prefixIcon: Icon(Icons.lock_outline)),
           obscureText: true),
       const SizedBox(height: 20),
-      FilledButton(onPressed: _busy ? null : _register,
-          child: _busy ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Create account')),
+      FilledButton(
+          onPressed: _busy ? null : _register,
+          child: _busy
+              ? const SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: CircularProgressIndicator(strokeWidth: 2))
+              : const Text('Create account')),
     ]);
   }
 
   Widget _buildLoginForm() {
     return ListView(padding: const EdgeInsets.all(20), children: [
-      TextField(controller: _loginEmail, decoration: const InputDecoration(labelText: 'Email', prefixIcon: Icon(Icons.email_outlined)),
+      TextField(
+          controller: _loginEmail,
+          decoration: const InputDecoration(
+              labelText: 'Email', prefixIcon: Icon(Icons.email_outlined)),
           keyboardType: TextInputType.emailAddress),
       const SizedBox(height: 12),
-      TextField(controller: _loginPass, decoration: const InputDecoration(labelText: 'Password', prefixIcon: Icon(Icons.lock_outline)),
+      TextField(
+          controller: _loginPass,
+          decoration: const InputDecoration(
+              labelText: 'Password', prefixIcon: Icon(Icons.lock_outline)),
           obscureText: true),
       const SizedBox(height: 20),
-      FilledButton(onPressed: _busy ? null : _login,
-          child: _busy ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Log in')),
+      FilledButton(
+          onPressed: _busy ? null : _login,
+          child: _busy
+              ? const SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: CircularProgressIndicator(strokeWidth: 2))
+              : const Text('Log in')),
     ]);
   }
 }
