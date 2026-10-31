@@ -34,7 +34,7 @@ Two codegen pipelines:
 
 `service/auth/` provides JWT token generation and validation (`token.go`) and config (`config.go`). Access tokens expire in 15 min, refresh tokens in 7 days; roles are embedded in JWT claims. The secret is read from `JWT_SECRET` env var (default: `gym-jinni-dev-secret-change-in-prod`).
 
-RBAC lives in `service/rbac/` (a normal module) plus `service/middleware/` (`auth.go`, `permissions.go`). `middleware/permissions.go` maps gRPC method paths → required permission names and maintains the public-method allowlist (LoginUser, CreateUser, RenewAccessToken). `AuthInterceptor(rbacClient)` is **already wired** in `service.go` as the second interceptor — it extracts `user_id` from the JWT via the `authorization` or `grpcgateway-authorization` metadata header and calls `rbacClient.CheckPermission()`. See `service/RBAC.md`. Note: an older `.cursor/plans/` doc proposed a standalone `csr_service/` directory — that was **not** the chosen design; RBAC is part of the `service` module.
+RBAC lives in `service/rbac/` (a normal module) plus `service/middleware/` (`auth.go`, `permissions.go`). `middleware/permissions.go` maps gRPC method paths → required permission names and maintains the public-method allowlist (LoginUser, CreateUser, RenewAccessToken). `AuthInterceptor(rbacClient)` is **already wired** in `service.go` as the second interceptor — it extracts `user_id` from the JWT via the `authorization` or `grpcgateway-authorization` metadata header and calls `rbacClient.CheckPermission()`. See `service/RBAC.md`. RBAC is part of the `service` module.
 
 ### Database & migrations
 
