@@ -1,0 +1,97 @@
+syntax = "proto3";
+
+package schedule.v1alpha;
+
+import "google/type/datetime.proto";
+import "google/api/annotations.proto";
+
+message Schedule {
+    int32 id = 1;
+    int32 gym_id = 2;
+    int32 trainer_id = 3;
+    int32 class_id = 4;
+    string recurrence_rule = 5;
+    google.type.DateTime start_date = 6;
+    google.type.DateTime end_date = 7;
+    google.type.DateTime created_at = 8;
+}
+
+message CreateScheduleRequest {
+    int32 gym_id = 1;
+    int32 trainer_id = 2;
+    int32 class_id = 3;
+    string recurrence_rule = 4;
+    google.type.DateTime start_date = 5;
+    google.type.DateTime end_date = 6;
+}
+
+message CreateScheduleResponse {
+    Schedule schedule = 1;
+}
+
+message GetScheduleRequest {
+    int32 id = 1;
+}
+
+message GetScheduleResponse {
+    Schedule schedule = 1;
+}
+
+message ListSchedulesRequest {
+    int32 gym_id = 1;
+}
+
+message ListSchedulesResponse {
+    repeated Schedule schedules = 1;
+}
+
+message UpdateScheduleRequest {
+    int32 id = 1;
+    string recurrence_rule = 2;
+    google.type.DateTime start_date = 3;
+    google.type.DateTime end_date = 4;
+}
+
+message UpdateScheduleResponse {
+    Schedule schedule = 1;
+}
+
+message DeleteScheduleRequest {
+    int32 id = 1;
+}
+
+message DeleteScheduleResponse {}
+
+service ScheduleService {
+    rpc CreateSchedule(CreateScheduleRequest) returns (CreateScheduleResponse) {
+        option (google.api.http) = {
+            post: "/v1/schedules"
+            body: "*"
+        };
+    }
+
+    rpc GetSchedule(GetScheduleRequest) returns (GetScheduleResponse) {
+        option (google.api.http) = {
+            get: "/v1/schedules/{id}"
+        };
+    }
+
+    rpc ListSchedules(ListSchedulesRequest) returns (ListSchedulesResponse) {
+        option (google.api.http) = {
+            get: "/v1/schedules"
+        };
+    }
+
+    rpc UpdateSchedule(UpdateScheduleRequest) returns (UpdateScheduleResponse) {
+        option (google.api.http) = {
+            put: "/v1/schedules/{id}"
+            body: "*"
+        };
+    }
+
+    rpc DeleteSchedule(DeleteScheduleRequest) returns (DeleteScheduleResponse) {
+        option (google.api.http) = {
+            delete: "/v1/schedules/{id}"
+        };
+    }
+}

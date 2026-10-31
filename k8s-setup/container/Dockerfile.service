@@ -1,0 +1,44 @@
+# Multi-stage build: generate protobuf + sqlc, then compile
+FROM docker.io/library/golang:1.25.8-bookworm AS builder
+
+RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates \
+  && curl -sSL "https://github.com/bufbuild/buf/releases/download/v1.66.1/buf-Linux-x86_64.tar.gz" | tar -xz -C /usr/local --strip-components=1 \
+  && rm -rf /var/lib/apt/lists/*
+
+ENV PATH="/go/bin:/usr/local/bin:${PATH}"
+
+RUN go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.28.0 && \
+    go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.2.0 && \
+    go install github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-grpc-gateway@v2.10.3 && \
+    go install github.com/mwitkow/go-proto-validators/protoc-gen-govalidators@v0.3.2 && \
+    go install github.com/sqlc-dev/sqlc/cmd/sqlc@v1.24.0
+
+WORKDIR /build
+COPY service/go.mod service/go.sum ./service/
+WORKDIR /build/service
+RUN go mod download
+
+# .dockerignore excludes local gen/ so protobuf and sqlc start from clean output.
+COPY service/ ./
+
+WORKDIR /build/service
+# Do not run `buf mod update`/`buf dep update` per module here: those commands resolve
+# each module in isolation and fail on workspace imports (e.g. user → validator).
+# buf.build pins live in committed buf.lock; `buf generate` uses buf.work.yaml and succeeds.
+RUN buf lint && buf generate
+RUN for s in user class rbac booking gym schedule payment notification activity; do (cd $s/db && sqlc generate); done
+
+RUN go test ./...
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o /out/service .
+
+FROM docker.io/library/alpine:3.23
+RUN apk add --no-cache ca-certificates bash curl \
+  && curl -fsSL https://github.com/golang-migrate/migrate/releases/download/v4.15.2/migrate.linux-amd64.tar.gz \
+    | tar -xz -C /usr/local/bin \
+  && chmod +x /usr/local/bin/migrate
+WORKDIR /app/service
+COPY --from=builder /out/service /app/service/service
+COPY service/mig/ /app/service/mig/
+EXPOSE 8080 8081
+ENV DBURL="postgresql://root:gj@postgres:5432/gj?sslmode=disable&search_path=public"
+CMD ["/app/service/service"]

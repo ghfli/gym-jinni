@@ -1,0 +1,10 @@
+version: 2
+sql:
+  - schema: "../../schema/schedule.sql"
+    queries: "schedule.sqlc.sql"
+    engine: "postgresql"
+    gen:
+      go:
+        package: "schedulev1alpha"
+        out: "../../gen/go/schedule/v1alpha"
+        sql_package: "database/sql"

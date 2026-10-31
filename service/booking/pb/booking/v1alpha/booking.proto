@@ -1,0 +1,97 @@
+syntax = "proto3";
+
+package booking.v1alpha;
+
+import "google/type/datetime.proto";
+import "google/api/annotations.proto";
+
+enum BookingStatus {
+    BOOKING_STATUS_UNSPECIFIED = 0;
+    BOOKING_STATUS_CONFIRMED = 1;
+    BOOKING_STATUS_CANCELLED = 2;
+    BOOKING_STATUS_COMPLETED = 3;
+    BOOKING_STATUS_NO_SHOW = 4;
+}
+
+message Booking {
+    int32 id = 1;
+    int32 user_id = 2;
+    int32 class_id = 3;
+    BookingStatus status = 4;
+    google.type.DateTime booked_at = 5;
+    google.type.DateTime cancelled_at = 6;
+}
+
+message CreateBookingRequest {
+    int32 user_id = 1;
+    int32 class_id = 2;
+}
+
+message CreateBookingResponse {
+    Booking booking = 1;
+}
+
+message CancelBookingRequest {
+    int32 id = 1;
+}
+
+message CancelBookingResponse {
+    Booking booking = 1;
+}
+
+message GetBookingRequest {
+    int32 id = 1;
+}
+
+message GetBookingResponse {
+    Booking booking = 1;
+}
+
+message ListUserBookingsRequest {
+    int32 user_id = 1;
+}
+
+message ListUserBookingsResponse {
+    repeated Booking bookings = 1;
+}
+
+message ListClassBookingsRequest {
+    int32 class_id = 1;
+}
+
+message ListClassBookingsResponse {
+    repeated Booking bookings = 1;
+}
+
+service BookingService {
+    rpc CreateBooking(CreateBookingRequest) returns (CreateBookingResponse) {
+        option (google.api.http) = {
+            post: "/v1/bookings"
+            body: "*"
+        };
+    }
+
+    rpc CancelBooking(CancelBookingRequest) returns (CancelBookingResponse) {
+        option (google.api.http) = {
+            post: "/v1/bookings/{id}/cancel"
+        };
+    }
+
+    rpc GetBooking(GetBookingRequest) returns (GetBookingResponse) {
+        option (google.api.http) = {
+            get: "/v1/bookings/{id}"
+        };
+    }
+
+    rpc ListUserBookings(ListUserBookingsRequest) returns (ListUserBookingsResponse) {
+        option (google.api.http) = {
+            get: "/v1/users/{user_id}/bookings"
+        };
+    }
+
+    rpc ListClassBookings(ListClassBookingsRequest) returns (ListClassBookingsResponse) {
+        option (google.api.http) = {
+            get: "/v1/classes/{class_id}/bookings"
+        };
+    }
+}

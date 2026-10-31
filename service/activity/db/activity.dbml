@@ -1,0 +1,17 @@
+Project gymjinni_activity {
+  database_type: 'PostgreSQL'
+  Note: 'gymjinni activity tracking database schema'
+}
+
+Table activity.activity {
+  id serial [pk]
+  user_id int [not null, ref: > user.user.id]
+  gym_id int
+  activity_type varchar [not null]
+  title varchar [not null]
+  description text
+  duration_minutes int
+  calories int
+  distance_meters int
+  created_at timestamptz [not null, default: `now()`]
+}

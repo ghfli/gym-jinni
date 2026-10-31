@@ -4,18 +4,86 @@ package class.v1alpha;
 
 import "google/type/datetime.proto";
 import "google/api/annotations.proto";
-
-import "user/v1alpha/user.proto";
+import "validator/v1alpha/validator.proto";
 
 message Class {
-    uint32 id = 1;
-    uint32 created_by = 2;
+    int32 id = 1;
+    int32 created_by = 2;
     google.type.DateTime start_time = 3;
     google.type.DateTime end_time = 4;
-    string description = 5;
-    uint32 min_hdcnt = 6;
-    uint32 max_hdcnt = 7;
-    // google.type.DateTime created_at = 2;
-    // string poster = 5;
+    string description = 5 [(validator.v1alpha.field) = {msg_exists: true, string_not_empty: true}];
+    int32 min_hdcnt = 6;
+    int32 max_hdcnt = 7;
 }
 
+message CreateClassRequest {
+    Class class = 1;
+}
+
+message CreateClassResponse {
+    Class class = 1;
+}
+
+message GetClassRequest {
+    int32 id = 1;
+}
+
+message GetClassResponse {
+    Class class = 1;
+}
+
+message ListClassesRequest {}
+
+message ListClassesResponse {
+    repeated Class classes = 1;
+}
+
+message UpdateClassRequest {
+    Class class = 1;
+}
+
+message UpdateClassResponse {
+    Class class = 1;
+}
+
+message DeleteClassRequest {
+    int32 id = 1;
+}
+
+message DeleteClassResponse {
+    bool success = 1;
+}
+
+service ClassService {
+    rpc CreateClass(CreateClassRequest) returns (CreateClassResponse) {
+        option (google.api.http) = {
+            post: "/v1/classes"
+            body: "*"
+        };
+    }
+
+    rpc GetClass(GetClassRequest) returns (GetClassResponse) {
+        option (google.api.http) = {
+            get: "/v1/classes/{id}"
+        };
+    }
+
+    rpc ListClasses(ListClassesRequest) returns (ListClassesResponse) {
+        option (google.api.http) = {
+            get: "/v1/classes"
+        };
+    }
+
+    rpc UpdateClass(UpdateClassRequest) returns (UpdateClassResponse) {
+        option (google.api.http) = {
+            put: "/v1/classes/{class.id}"
+            body: "*"
+        };
+    }
+
+    rpc DeleteClass(DeleteClassRequest) returns (DeleteClassResponse) {
+        option (google.api.http) = {
+            delete: "/v1/classes/{id}"
+        };
+    }
+}

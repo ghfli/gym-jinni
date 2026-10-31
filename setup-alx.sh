@@ -44,8 +44,12 @@ fi
 
 echo installing any other optional packages you like...
 # pacman -D --noconfirm npm && rm -rf /usr/lib/node_modules/npm
-pacman -S --needed --noconfirm darkhttpd man-db npm docker \
+pacman -S --needed --noconfirm darkhttpd man-db npm podman \
     protobuf ctags github-cli
+
+if systemctl list-unit-files podman.socket 2>/dev/null | grep -q podman.socket; then
+    systemctl enable --now podman.socket
+fi
 
 if ! installed dbdocs ; then
     echo installing dbdocs...

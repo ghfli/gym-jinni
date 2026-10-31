@@ -1,0 +1,15 @@
+Project gymjinni_schedule {
+  database_type: 'PostgreSQL'
+  Note: 'gymjinni schedule management database schema'
+}
+
+Table schedule.schedule {
+  id serial [pk]
+  gym_id int
+  trainer_id int
+  class_id int [ref: > class.class.id]
+  recurrence_rule varchar
+  start_date timestamptz [not null]
+  end_date timestamptz
+  created_at timestamptz [not null, default: `now()`]
+}

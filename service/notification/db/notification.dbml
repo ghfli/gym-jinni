@@ -1,0 +1,26 @@
+Project gymjinni_notification {
+  database_type: 'PostgreSQL'
+  Note: 'gymjinni notification management database schema'
+}
+
+Table notification.notification {
+  id serial [pk]
+  user_id int [not null, ref: > user.user.id]
+  type varchar [not null]
+  channel varchar [not null, default: 'in_app']
+  title varchar [not null]
+  body text
+  is_read bool [not null, default: false]
+  created_at timestamptz [not null, default: `now()`]
+}
+
+Table notification.preference {
+  id serial [pk]
+  user_id int [not null, ref: > user.user.id]
+  channel varchar [not null]
+  enabled bool [not null, default: true]
+
+  indexes {
+    (user_id, channel) [unique]
+  }
+}

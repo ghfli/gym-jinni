@@ -1,0 +1,61 @@
+---
+# ansible.cfg enables become=true globally; k3d writes kubeconfig to the
+# invoking user's ~/.kube/ (setup-cluster-k3d.yml uses become: no). Run these
+# plays without privilege escalation so kubectl sees that kubeconfig.
+- name: Build ui image
+  hosts: localhost
+  gather_facts: yes
+  become: no
+  roles:
+    - role: build-ui-image
+      tags: ['build', 'images', 'ui']
+
+- name: Build backend service image
+  hosts: localhost
+  gather_facts: yes
+  become: no
+  roles:
+    - role: build-service-image
+      tags: ['build', 'images', 'service']
+
+- name: Deploy gym-jinni services to Kubernetes
+  hosts: localhost
+  gather_facts: yes
+  become: no
+  roles:
+    - role: gym-jinni
+      tags: ['deploy', 'services']
+
+- name: Verify deployment
+  hosts: localhost
+  gather_facts: no
+  become: no
+  tasks:
+    - name: Wait for PostgreSQL to be ready
+      shell: |
+        export KUBECONFIG=$HOME/.kube/gym-jinni-config
+        kubectl wait --for=condition=ready pod -l app=postgres -n gym-jinni --timeout=300s
+      tags: ['verify']
+
+    - name: Wait for services to be ready
+      shell: |
+        export KUBECONFIG=$HOME/.kube/gym-jinni-config
+        kubectl wait --for=condition=ready pod -l app={{ item }} -n gym-jinni --timeout=300s
+      loop:
+        - main-service
+        - ui
+      tags: ['verify']
+
+    - name: Display service endpoints
+      shell: |
+        export KUBECONFIG=$HOME/.kube/gym-jinni-config
+        kubectl get svc -n gym-jinni
+      register: services_output
+      changed_when: false
+      tags: ['verify']
+
+    - name: Show services
+      debug:
+        msg: "{{ services_output.stdout_lines }}"
+      tags: ['verify']
+

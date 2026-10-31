@@ -45,7 +45,7 @@ the archlinux vm.
 Directory service/ is for developing backend service:
 ```
     * make setup
-        - create docker postgres:alpine
+        - create a local postgres:alpine container (e.g. podman/docker)
         - create database gj
         - migrate up database schemas
     * make test

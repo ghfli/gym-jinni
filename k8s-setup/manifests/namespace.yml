@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: gym-jinni
+  labels:
+    name: gym-jinni
+    environment: test
+

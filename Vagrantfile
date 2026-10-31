@@ -68,7 +68,8 @@ Vagrant.configure("2") do |config|
   # SHELL
 
   config.vm.define :alx do |alx|
-    alx.vm.box = "archlinux/archlinux"
+    # alx.vm.box = "archlinux/archlinux"
+    alx.vm.box = "generic/arch"
 
     # See details at https://github.com/vagrant-libvirt/vagrant-libvirt.
     alx.vm.provider :libvirt do |dom, override|

@@ -1,0 +1,167 @@
+#!/bin/bash
+set -e
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+echo -e "${GREEN}========================================${NC}"
+echo -e "${GREEN}Gym-Jinni K8s Test Environment Setup${NC}"
+echo -e "${GREEN}========================================${NC}"
+echo ""
+
+# Check prerequisites
+echo -e "${YELLOW}Checking prerequisites...${NC}"
+
+command -v ansible-playbook >/dev/null 2>&1 || { echo -e "${RED}Error: ansible is not installed${NC}" >&2; exit 1; }
+command -v kubectl >/dev/null 2>&1 || { echo -e "${RED}Error: kubectl is not installed${NC}" >&2; exit 1; }
+command -v docker >/dev/null 2>&1 || { echo -e "${RED}Error: docker is not installed${NC}" >&2; exit 1; }
+
+# Podman's docker CLI wrapper does not check the Docker API socket used by k3d.
+# Prefer Docker when available, otherwise use the rootful Podman API socket.
+if [ -z "${DOCKER_HOST:-}" ] && [ ! -S /var/run/docker.sock ] && [ -S /run/podman/podman.sock ]; then
+    export DOCKER_HOST=unix:///run/podman/podman.sock
+fi
+
+# k3d uses the Docker API; require a reachable daemon (same engine Ansible uses).
+if ! docker info >/dev/null 2>&1 && ! sudo docker info >/dev/null 2>&1; then
+    echo -e "${RED}Error: Docker daemon is not reachable (required for k3d).${NC}" >&2
+    echo "Start Docker (e.g. sudo systemctl start docker) or ensure your user can run \`docker info\`." >&2
+    exit 1
+fi
+
+echo -e "${GREEN}✓ Prerequisites check passed${NC}"
+echo ""
+
+# Get script directory
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+cd "$SCRIPT_DIR"
+
+# Ansible ignores ./ansible.cfg in world-writable dirs (e.g. /mnt/c on WSL); an explicit path is honored.
+export ANSIBLE_CONFIG="$SCRIPT_DIR/ansible.cfg"
+
+# Parse command line arguments
+SKIP_BUILD=false
+SKIP_DEPLOY=false
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --skip-build)
+            SKIP_BUILD=true
+            shift
+            ;;
+        --skip-deploy)
+            SKIP_DEPLOY=true
+            shift
+            ;;
+        --help)
+            echo "Usage: $0 [OPTIONS]"
+            echo ""
+            echo "Options:"
+            echo "  --skip-build    Skip building container images"
+            echo "  --skip-deploy   Skip deploying services"
+            echo "  --help          Show this help message"
+            exit 0
+            ;;
+        *)
+            echo -e "${RED}Unknown option: $1${NC}"
+            exit 1
+            ;;
+    esac
+done
+
+# Step 1: Setup cluster
+echo -e "${YELLOW}Step 1: Setting up k3d Kubernetes cluster...${NC}"
+ansible-playbook playbooks/setup-cluster-k3d.yml
+
+if [ $? -ne 0 ]; then
+    echo -e "${RED}Failed to setup cluster${NC}"
+    exit 1
+fi
+
+echo -e "${GREEN}✓ Cluster setup complete${NC}"
+echo ""
+
+# Step 2: Export KUBECONFIG
+echo -e "${YELLOW}Step 2: Configuring kubectl access...${NC}"
+export KUBECONFIG=$HOME/.kube/gym-jinni-config
+KUBECONFIG_LINE="export KUBECONFIG=$HOME/.kube/gym-jinni-config"
+grep -qxF "$KUBECONFIG_LINE" "$HOME/.bashrc" 2>/dev/null || echo "$KUBECONFIG_LINE" >> "$HOME/.bashrc"
+
+echo -e "${GREEN}✓ kubectl configured${NC}"
+echo ""
+
+# Wait for cluster to be fully ready
+echo -e "${YELLOW}Waiting for cluster to be fully ready...${NC}"
+sleep 10
+
+# Step 3: Build and deploy services
+if [ "$SKIP_BUILD" = false ] && [ "$SKIP_DEPLOY" = false ]; then
+    echo -e "${YELLOW}Step 3: Building container images and deploying services...${NC}"
+    ansible-playbook playbooks/deploy-services.yml
+    
+    if [ $? -ne 0 ]; then
+        echo -e "${RED}Failed to deploy services${NC}"
+        exit 1
+    fi
+    
+    echo -e "${GREEN}✓ Services deployed${NC}"
+    echo ""
+elif [ "$SKIP_BUILD" = false ]; then
+    echo -e "${YELLOW}Step 3: Building container images...${NC}"
+    ansible-playbook playbooks/deploy-services.yml --tags build
+    echo -e "${GREEN}✓ Images built${NC}"
+    echo ""
+elif [ "$SKIP_DEPLOY" = false ]; then
+    echo -e "${YELLOW}Step 3: Deploying services...${NC}"
+    ansible-playbook playbooks/deploy-services.yml --tags deploy
+    echo -e "${GREEN}✓ Services deployed${NC}"
+    echo ""
+fi
+
+# Display cluster info
+echo -e "${GREEN}========================================${NC}"
+echo -e "${GREEN}Setup Complete!${NC}"
+echo -e "${GREEN}========================================${NC}"
+echo ""
+echo -e "${YELLOW}Cluster Information:${NC}"
+echo ""
+echo "Kubectl config: $HOME/.kube/gym-jinni-config"
+echo "To use kubectl: export KUBECONFIG=$HOME/.kube/gym-jinni-config"
+echo ""
+echo -e "${YELLOW}Useful Commands:${NC}"
+echo ""
+echo "  # View all pods"
+echo "  kubectl get pods -n gym-jinni"
+echo ""
+echo "  # View all services"
+echo "  kubectl get svc -n gym-jinni"
+echo ""
+echo "  # View logs"
+echo "  kubectl logs -f deployment/main-service -n gym-jinni"
+echo "  kubectl logs -f deployment/ui -n gym-jinni"
+echo ""
+echo "  # Optional: port-forward using the same local ports as in-cluster (k3d LB uses 39xxx on the host instead)"
+echo "  kubectl port-forward -n gym-jinni svc/main-service 8080:8080 8081:8081"
+echo "  kubectl port-forward -n gym-jinni svc/ui 3000:80"
+echo ""
+echo "  # View k3d cluster info"
+echo "  k3d cluster list"
+echo "  k3d node list"
+echo ""
+echo "  # Access k3d nodes directly (if needed)"
+echo "  docker exec -it k3d-gym-jinni-server-0 sh"
+echo ""
+echo -e "${YELLOW}Service endpoints (via k3d load balancer on the host):${NC}"
+echo ""
+echo "  Main Service gRPC: localhost:39080"
+echo "  Main Service HTTP: http://localhost:39081/v1/roles"
+echo "  CSR (same API):    use main-service URLs above (see configmaps)"
+echo "  UI:                http://localhost:39300"
+echo ""
+echo -e "${YELLOW}In-cluster:${NC} main-service 8080/8081, ui Service :80 (NodePorts 30080/30081/30000 for k3d LB)"
+echo ""
+echo -e "${GREEN}Happy testing!${NC}"
+

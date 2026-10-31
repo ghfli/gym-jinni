@@ -1,0 +1,26 @@
+Project gymjinni_gym {
+  database_type: 'PostgreSQL'
+  Note: 'gymjinni gym management database schema'
+}
+
+Table gym.gym {
+  id serial [pk]
+  name varchar [not null]
+  address varchar
+  phone varchar
+  email varchar
+  owner_id int [ref: > user.user.id]
+  created_at timestamptz [not null, default: `now()`]
+}
+
+Table gym.membership {
+  id serial [pk]
+  user_id int [not null, ref: > user.user.id]
+  gym_id int [not null, ref: > gym.gym.id]
+  role varchar [not null, default: 'member']
+  joined_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (user_id, gym_id) [unique]
+  }
+}

@@ -1,0 +1,151 @@
+---
+- name: Check if k3d is installed
+  shell: command -v k3d
+  register: k3d_check
+  changed_when: false
+  failed_when: false
+
+- name: Install k3d
+  block:
+    - name: Download k3d installation script
+      get_url:
+        url: https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh
+        dest: /tmp/k3d-install.sh
+        mode: '0755'
+      when: k3d_check.rc != 0
+
+    - name: Run k3d installation script
+      shell: bash /tmp/k3d-install.sh
+      become: yes
+      when: k3d_check.rc != 0
+
+    - name: Remove installation script
+      file:
+        path: /tmp/k3d-install.sh
+        state: absent
+      when: k3d_check.rc != 0
+  when: k3d_check.rc != 0
+
+- name: Verify Docker daemon is reachable (required for k3d)
+  shell: sudo -E k3d cluster list
+  environment:
+    DOCKER_HOST: "{{ k3d_docker_host }}"
+  register: k3d_docker_info
+  changed_when: false
+  failed_when: false
+
+- name: Fail when Docker is not available
+  fail:
+    msg: >-
+      Docker daemon is not reachable with DOCKER_HOST={{ k3d_docker_host }}.
+      Start the Docker/Podman API socket and ensure `sudo -E k3d cluster list` works,
+      or set DOCKER_HOST / override k3d_docker_host in inventory.
+  when: k3d_docker_info.rc != 0
+
+- name: Check if k3d cluster already exists
+  shell: sudo -E k3d cluster list | grep -w "{{ k3d_cluster_name }}"
+  environment:
+    DOCKER_HOST: "{{ k3d_docker_host }}"
+  register: cluster_check
+  changed_when: false
+  failed_when: false
+
+- name: Delete existing k3d cluster if present
+  shell: sudo -E k3d cluster delete {{ k3d_cluster_name }}
+  environment:
+    DOCKER_HOST: "{{ k3d_docker_host }}"
+  when: cluster_check.rc == 0
+  register: cluster_delete
+  changed_when: cluster_delete.rc == 0
+
+# Same cluster name on another engine still binds host ports (6443, k3d LB 390xx, etc.).
+# If k3d_docker_host is not the default socket, detect a stale same-named cluster there.
+- name: Check default Docker socket for conflicting k3d cluster name
+  shell: >-
+    sudo DOCKER_HOST=unix:///var/run/docker.sock k3d cluster list 2>/dev/null
+    | grep -w "{{ k3d_cluster_name }}" || true
+  register: k3d_docker_dup_check
+  changed_when: false
+  when: k3d_docker_host != 'unix:///var/run/docker.sock'
+
+- name: Fail when conflicting k3d cluster still exists on default Docker socket
+  fail:
+    msg: >-
+      A k3d cluster named "{{ k3d_cluster_name }}" still exists on
+      unix:///var/run/docker.sock while this playbook uses DOCKER_HOST={{ k3d_docker_host }}.
+      It can keep host ports such as {{ k3d_api_port }} busy. Delete the conflicting cluster, then re-run:
+      sudo DOCKER_HOST=unix:///var/run/docker.sock k3d cluster delete {{ k3d_cluster_name }}
+  when: k3d_docker_dup_check.stdout | default('') | length > 0
+
+# Ansible waits for the whole shell to exit and does not stream k3d output live, so this
+# step prints nothing until k3d finishes (or timeout(1) kills it after 3600s → rc 124).
+- name: Note on k3d cluster create (no live progress in this terminal)
+  debug:
+    msg: >-
+      Creating cluster (image pulls + --wait). There will be no further output here until
+      k3d exits. In another shell: sudo docker ps -a; then
+      sudo docker logs -f k3d-{{ k3d_cluster_name }}-server-0 once that container exists.
+      Hard limit: 3600s (timeout exit 124 = still stuck; check logs/port conflicts).
+
+- name: Create k3d cluster
+  shell: |
+    sudo -E timeout 3600 k3d cluster create {{ k3d_cluster_name }} \
+      --servers {{ k3d_servers }} \
+      --agents {{ k3d_agents }} \
+      --api-port {{ k3d_api_port }} \
+      {% for port in k3d_port_mappings %}
+      --port {{ port }} \
+      {% endfor %}
+      --wait
+  environment:
+    DOCKER_HOST: "{{ k3d_docker_host }}"
+    K3D_LOG_LEVEL: debug
+  register: cluster_create
+  changed_when: cluster_create.rc == 0
+
+# Ensure ~/.kube exists and is owned by the Ansible user. A root-owned ~/.kube
+# is common (e.g. from other tools); shell redirection in "sudo cmd > file"
+# opens the file as the normal user, which then fails with "Permission denied".
+- name: Create .kube directory
+  file:
+    path: "{{ ansible_facts['env']['HOME'] }}/.kube"
+    state: directory
+    mode: '0755'
+    owner: "{{ ansible_facts['user_id'] }}"
+    group: "{{ ansible_facts['user_gid'] }}"
+  become: true
+
+# Avoid "sudo ... > path": the redirect is handled by the user shell, not root.
+- name: Fetch kubeconfig from k3d
+  shell: sudo -E k3d kubeconfig get {{ k3d_cluster_name }}
+  environment:
+    DOCKER_HOST: "{{ k3d_docker_host }}"
+  register: kubeconfig_export
+  changed_when: false
+
+- name: Write kubeconfig file
+  copy:
+    dest: "{{ k3d_kubeconfig_path }}"
+    content: "{{ kubeconfig_export.stdout }}\n"
+    mode: '0600'
+
+- name: Wait for cluster to be ready
+  shell: |
+    export KUBECONFIG={{ k3d_kubeconfig_path }}
+    kubectl wait --for=condition=ready node --all --timeout=300s
+  register: cluster_ready
+  retries: 5
+  delay: 10
+  until: cluster_ready.rc == 0
+
+- name: Display cluster info
+  shell: |
+    export KUBECONFIG={{ k3d_kubeconfig_path }}
+    kubectl get nodes
+  register: nodes_output
+  changed_when: false
+
+- name: Show cluster nodes
+  debug:
+    msg: "{{ nodes_output.stdout_lines }}"
+
