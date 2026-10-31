@@ -53,6 +53,7 @@ deploy:kubernetes:
     - echo "$KUBECONFIG_CONTENT" | base64 -d > $HOME/.kube/config
   script:
     - kubectl apply -f k8s-setup/manifests/namespace.yml
+    - bash k8s-setup/scripts/ensure-jwt-secret.sh
     - kubectl apply -f k8s-setup/manifests/secrets.yml
     - kubectl apply -f k8s-setup/manifests/configmaps.yml
     - kubectl apply -f k8s-setup/manifests/postgres-statefulset.yml

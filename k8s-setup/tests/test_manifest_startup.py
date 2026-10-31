@@ -1,0 +1,160 @@
+"""Validate real manifest init commands and signing-secret lifecycle without a cluster."""
+import base64
+import json
+import os
+from pathlib import Path
+import re
+import subprocess
+import tempfile
+import unittest
+
+ROOT = Path(__file__).resolve().parents[2]
+SCRIPT = ROOT / "k8s-setup/scripts/ensure-jwt-secret.sh"
+MANIFEST = ROOT / "k8s-setup/manifests/main-service-deployment.yml"
+FAKE_KUBECTL = r'''#!/usr/bin/env python3
+import base64, json, os, pathlib, stat, sys
+args = sys.argv[1:]
+store = pathlib.Path(os.environ['SECRET_STORE'])
+mode = os.environ.get('FAKE_MODE', '')
+with open(os.environ['COMMAND_LOG'], 'a') as output:
+    output.write(json.dumps(args) + '\n')
+if args[:2] == ['get', 'secret']:
+    if mode == 'get-denied': sys.exit(1)
+    if store.exists():
+        data = json.loads(store.read_text())
+        print('gym-jinni-auth\n' + data.get('JWT_SECRET', ''))
+    sys.exit(0)
+if args[:3] == ['create', 'secret', 'generic']:
+    if mode == 'create-denied': sys.exit(1)
+    if mode == 'race':
+        store.write_text(json.dumps({'JWT_SECRET': base64.b64encode(b'race-winner-signing-key-at-least-32-bytes').decode()}))
+        sys.exit(1)
+    if store.exists(): sys.exit(1)
+    filename = next(a.split('=', 2)[2] for a in args if a.startswith('--from-file=JWT_SECRET='))
+    assert stat.S_IMODE(pathlib.Path(filename).stat().st_mode) == 0o600
+    payload = pathlib.Path(filename).read_bytes()
+    store.write_text(json.dumps({'JWT_SECRET': base64.b64encode(payload).decode()}))
+    sys.exit(0)
+sys.exit(2)
+'''
+
+
+class StartupContractTest(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        self.store = self.root / "secret.json"
+        self.log = self.root / "commands.jsonl"
+        self.env = dict(os.environ, PATH=f"{self.root}:{os.environ['PATH']}",
+                        SECRET_STORE=str(self.store), COMMAND_LOG=str(self.log),
+                        TMPDIR=str(self.root))
+        self.env.pop("JWT_SECRET", None)
+        self.env.pop("FAKE_MODE", None)
+        executable = self.root / "kubectl"
+        executable.write_text(FAKE_KUBECTL)
+        executable.chmod(0o700)
+
+    def run_helper(self, key=None, mode=""):
+        self.env["FAKE_MODE"] = mode
+        if key is not None:
+            self.env["JWT_SECRET"] = key
+        return subprocess.run(["bash", str(SCRIPT)], env=self.env, text=True,
+                              capture_output=True, timeout=10)
+
+    def stored(self):
+        return base64.b64decode(json.loads(self.store.read_text())["JWT_SECRET"]).decode()
+
+    def seed(self, key):
+        self.store.write_text(json.dumps({"JWT_SECRET": base64.b64encode(key.encode()).decode()}))
+
+    def test_generated_key_is_valid_private_and_stable_on_redeploy(self):
+        first = self.run_helper()
+        self.assertEqual(first.returncode, 0, first.stderr)
+        key = self.stored()
+        self.assertGreaterEqual(len(key.encode()), 32)
+        self.assertNotIn(key, first.stdout + first.stderr + self.log.read_text())
+        second = self.run_helper()
+        self.assertEqual(second.returncode, 0, second.stderr)
+        self.assertEqual(self.stored(), key)
+        calls = [json.loads(line) for line in self.log.read_text().splitlines()]
+        self.assertEqual(sum(call[:2] == ["create", "secret"] for call in calls), 1)
+        self.assertFalse(list(self.root.glob("tmp*/JWT_SECRET")))
+
+    def test_explicit_key_is_preserved_without_logging(self):
+        key = "operator-provided-private-signing-key-with-32-bytes"
+        result = self.run_helper(key)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.stored(), key)
+        self.assertNotIn(key, result.stdout + result.stderr + self.log.read_text())
+        self.assertEqual(self.run_helper(key).returncode, 0)
+
+    def test_invalid_explicit_keys_fail_before_cluster_access(self):
+        for key in ["short", "gym-jinni-dev-secret-change-in-prod"]:
+            with self.subTest(key=key):
+                result = self.run_helper(key)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertFalse(self.store.exists())
+                self.assertFalse(self.log.exists())
+                self.assertNotIn(key, result.stdout + result.stderr)
+
+    def test_invalid_existing_secret_fails_without_replacement(self):
+        self.seed("short")
+        before = self.store.read_bytes()
+        result = self.run_helper()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(self.store.read_bytes(), before)
+        self.assertIn("valid existing", result.stderr)
+
+    def test_missing_existing_key_fails_without_replacement(self):
+        self.store.write_text("{}")
+        self.assertNotEqual(self.run_helper().returncode, 0)
+        self.assertEqual(self.store.read_text(), "{}")
+
+    def test_different_explicit_key_does_not_rotate_existing_secret(self):
+        self.seed("original-signing-key-that-is-at-least-32-bytes")
+        before = self.store.read_bytes()
+        result = self.run_helper("replacement-signing-key-that-is-at-least-32-bytes")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(self.store.read_bytes(), before)
+        self.assertIn("explicit key-rotation", result.stderr)
+
+    def test_read_or_create_denial_is_not_treated_as_success(self):
+        for mode in ["get-denied", "create-denied"]:
+            with self.subTest(mode=mode):
+                result = self.run_helper(mode=mode)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertFalse(self.store.exists())
+
+    def test_concurrent_creation_reuses_valid_winning_secret(self):
+        result = self.run_helper(mode="race")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("already configured", result.stdout)
+        self.assertGreaterEqual(len(self.stored()), 32)
+
+    def test_backend_requires_the_provisioned_secret(self):
+        backend = MANIFEST.read_text().split("      containers:\n", 1)[1]
+        self.assertRegex(backend, r"(?s)- name: JWT_SECRET\s+valueFrom:\s+secretKeyRef:\s+name: gym-jinni-auth\s+key: JWT_SECRET\s+optional: false")
+        self.assertNotIn("APP_ENV", backend)
+
+    def test_actual_init_command_preserves_migrate_exit_status(self):
+        block = MANIFEST.read_text().split("      - name: run-migrations\n", 1)[1].split("      containers:\n", 1)[0]
+        command = json.loads(re.search(r"command: (\[.*\])", block).group(1))
+        script = re.search(r"^          - (.+)$", block, re.M).group(1)
+        executable = self.root / "migrate"
+        executable.write_text("#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$MIGRATE_ARGS\"\nexit \"$MIGRATE_STATUS\"\n")
+        executable.chmod(0o700)
+        self.env.update(DBURL="postgresql://fixture/db?sslmode=disable&search_path=public",
+                        MIGRATE_ARGS=str(self.root / "migrate-args"))
+        for status in [0, 42]:
+            with self.subTest(status=status):
+                self.env["MIGRATE_STATUS"] = str(status)
+                result = subprocess.run(command + [script], env=self.env,
+                                        text=True, capture_output=True, timeout=10)
+                self.assertEqual(result.returncode, status)
+                args = (self.root / "migrate-args").read_text().splitlines()
+                self.assertEqual(args, ["-path", "/app/service/mig", "-database", self.env["DBURL"], "up"])
+
+
+if __name__ == "__main__":
+    unittest.main()

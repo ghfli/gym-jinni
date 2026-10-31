@@ -43,9 +43,9 @@ spec:
       - name: run-migrations
         image: gym-jinni/service:latest
         imagePullPolicy: Never
-        command: ["/bin/sh", "-c"]
+        command: ["/bin/sh", "-ec"]
         args:
-          - cd /app/service && migrate -path mig -database "${DBURL}" up || true
+          - exec migrate -path /app/service/mig -database "${DBURL}" up
         env:
         - name: DBURL
           valueFrom:
@@ -67,6 +67,12 @@ spec:
             configMapKeyRef:
               name: gym-jinni-config
               key: DBURL
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: gym-jinni-auth
+              key: JWT_SECRET
+              optional: false
         livenessProbe:
           tcpSocket:
             port: 8080

@@ -81,6 +81,13 @@ jobs:
     - name: Install cert-manager
       run: bash k8s-setup/scripts/install-cert-manager.sh
 
+    - name: Ensure backend signing secret
+      env:
+        JWT_SECRET: ${{ secrets.JWT_SECRET }}
+      run: |
+        kubectl apply -f k8s-setup/manifests/namespace.yml
+        bash k8s-setup/scripts/ensure-jwt-secret.sh
+
     - name: Deploy to Kubernetes
       run: |
         kubectl apply -f k8s-setup/manifests/namespace.yml
