@@ -80,6 +80,23 @@ def main():
             if result.returncode:
                 raise RuntimeError(result.stderr)
             print("PASS manifest migration: " + label, flush=True)
+        sql("fresh", "CREATE DATABASE rotation")
+        result = migrate("rotation", "goto 13")
+        if result.returncode:
+            raise RuntimeError(result.stderr)
+        sql("rotation", "INSERT INTO \"user\".\"user\"(id,name,hashed_passwd) VALUES(1,'fixture','unused');"
+            "INSERT INTO \"user\".session(id,user_id,refresh_tkn,user_agent,client_ip,expires_at,created_at) "
+            "VALUES('00000000-0000-0000-0000-000000000001',1,'plaintext-fixture','fixture','127.0.0.1',now()+interval '1 day',now());")
+        result = migrate("rotation", "goto 14")
+        if result.returncode or sql("rotation", "SELECT blocked AND refresh_tkn_hash=repeat('0',64) FROM \"user\".session;") != "t":
+            raise RuntimeError("Migration 14 failed to retire plaintext credentials")
+        result = migrate("rotation", "down 1")
+        if result.returncode or sql("rotation", "SELECT blocked AND refresh_tkn='' FROM \"user\".session;") != "t":
+            raise RuntimeError("Migration 14 downgrade restored an active plaintext credential")
+        result = migrate("rotation", "up")
+        if result.returncode:
+            raise RuntimeError(result.stderr)
+        print("PASS migration 14 retires plaintext credentials across upgrade/downgrade/reapply", flush=True)
         for database, problem in [("upgrade", None), ("duplicate", "duplicate"), ("invalidrange", "range")]:
             sql("fresh", "CREATE DATABASE " + database)
             result = migrate(database, "goto 12")
