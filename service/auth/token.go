@@ -1,7 +1,10 @@
 package auth
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"github.com/google/uuid"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -19,6 +22,7 @@ func GenerateAccessToken(userID int32, roles []string, sessionID string) (string
 	exp := time.Now().Add(AccessTokenDuration)
 	claims := Claims{
 		RegisteredClaims: jwt.RegisteredClaims{
+			ID:        uuid.New().String(),
 			ExpiresAt: jwt.NewNumericDate(exp),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 			Issuer:    "gym-jinni",
@@ -38,9 +42,14 @@ func GenerateAccessToken(userID int32, roles []string, sessionID string) (string
 }
 
 func GenerateRefreshToken(userID int32, sessionID string) (string, time.Time, error) {
-	exp := time.Now().Add(RefreshTokenDuration)
+	return GenerateRefreshTokenUntil(userID, sessionID, time.Now().Add(RefreshTokenDuration))
+}
+
+// GenerateRefreshTokenUntil keeps rotation bounded by the original session expiry.
+func GenerateRefreshTokenUntil(userID int32, sessionID string, exp time.Time) (string, time.Time, error) {
 	claims := Claims{
 		RegisteredClaims: jwt.RegisteredClaims{
+			ID:        uuid.New().String(),
 			ExpiresAt: jwt.NewNumericDate(exp),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 			Issuer:    "gym-jinni",
@@ -73,4 +82,10 @@ func ValidateToken(tokenString string, purpose string) (*Claims, error) {
 		return nil, fmt.Errorf("invalid token claims")
 	}
 	return claims, nil
+}
+
+// RefreshTokenHash is the only persisted representation of a refresh credential.
+func RefreshTokenHash(token string) string {
+	sum := sha256.Sum256([]byte(token))
+	return hex.EncodeToString(sum[:])
 }

@@ -429,3 +429,76 @@ func TestAccountDeletion(t *testing.T) {
 	s.expect("DELETE", fmt.Sprintf("/v1/users/%d", b.id), b.token, nil, 400)
 	s.expect("GET", "/v1/classes", b.token, nil, 200)
 }
+
+func TestRefreshRotationAndReplay(t *testing.T) {
+	s := setup(t)
+	a := s.user()
+	first := s.expect("POST", "/v1/renew_token", "", map[string]string{"refresh_tkn": a.refresh}, 200)
+	rotated := field(first, "refresh_tkn", "refreshTkn")
+	if rotated == a.refresh || rotated == "<nil>" || rotated == "" {
+		t.Fatal("refresh token was not rotated")
+	}
+	var stored string
+	if err := s.db.QueryRow(`SELECT refresh_tkn_hash FROM "user".session WHERE id=$1`, a.session).Scan(&stored); err != nil {
+		t.Fatal(err)
+	}
+	if stored != auth.RefreshTokenHash(rotated) {
+		t.Fatal("session does not contain the rotated credential hash")
+	}
+	second := s.expect("POST", "/v1/renew_token", "", map[string]string{"refresh_tkn": rotated}, 200)
+	current := field(second, "refresh_tkn", "refreshTkn")
+	s.expect("POST", "/v1/renew_token", "", map[string]string{"refresh_tkn": a.refresh}, 401)
+	s.expect("POST", "/v1/renew_token", "", map[string]string{"refresh_tkn": current}, 401)
+	s.expect("GET", "/v1/classes", field(second, "access_tkn", "accessTkn"), nil, 401)
+}
+
+func TestConcurrentRefreshReplayRevokesSession(t *testing.T) {
+	s := setup(t)
+	a := s.user()
+	codes := make(chan int, 2)
+	var wg sync.WaitGroup
+	for i := 0; i < 2; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			code, _ := s.request("POST", "/v1/renew_token", "", map[string]string{"refresh_tkn": a.refresh})
+			codes <- code
+		}()
+	}
+	wg.Wait()
+	close(codes)
+	success, denied := 0, 0
+	for code := range codes {
+		if code == 200 {
+			success++
+		}
+		if code == 401 {
+			denied++
+		}
+	}
+	if success != 1 || denied != 1 {
+		t.Fatalf("refresh race: successful=%d denied=%d", success, denied)
+	}
+	s.expect("GET", "/v1/classes", a.token, nil, 401)
+}
+
+func TestPasswordChangeRevokesAllSessions(t *testing.T) {
+	s := setup(t)
+	a := s.user()
+	var email string
+	if err := s.db.QueryRow(`SELECT email FROM "user"."user" WHERE id=$1`, a.id).Scan(&email); err != nil {
+		t.Fatal(err)
+	}
+	second := s.expect("POST", "/v1/login_user", "", map[string]any{"user": map[string]string{"email": email, "passwd": "validation-password"}}, 200)
+	s.expect("PUT", fmt.Sprintf("/v1/users/%d", a.id), a.token, map[string]any{"user": map[string]int{"id": a.id}, "new_passwd": "replacement-password"}, 200)
+	for _, token := range []string{a.token, field(second, "access_tkn", "accessTkn")} {
+		s.expect("GET", "/v1/classes", token, nil, 401)
+	}
+	s.expect("POST", "/v1/renew_token", "", map[string]string{"refresh_tkn": a.refresh}, 401)
+	s.expect("POST", "/v1/login_user", "", map[string]any{"user": map[string]string{"email": email, "passwd": "validation-password"}}, 401)
+	s.expect("POST", "/v1/login_user", "", map[string]any{"user": map[string]string{"email": email, "passwd": "replacement-password"}}, 200)
+	var changed bool
+	if err := s.db.QueryRow(`SELECT passwd_changed_at > '2000-01-01' FROM "user"."user" WHERE id=$1`, a.id).Scan(&changed); err != nil || !changed {
+		t.Fatal("password timestamp not updated", err)
+	}
+}

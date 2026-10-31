@@ -89,9 +89,12 @@ message RenewAccessTokenRequest {
 message RenewAccessTokenResponse {
     string access_tkn = 1;
     google.type.DateTime access_tkn_exp_at = 2;
+    string refresh_tkn = 3;
+    google.type.DateTime refresh_tkn_exp_at = 4;
 }
 
 service UserService {
+
     rpc CreateUser (CreateUserRequest) returns (CreateUserResponse) {
         option (google.api.http) = {
             post: "/v1/create_user"

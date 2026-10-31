@@ -96,7 +96,7 @@ def main():
             if not problem:
                 if result.returncode:
                     raise RuntimeError(result.stderr)
-                print("PASS valid migration 12 to 13 upgrade", flush=True)
+                print("PASS valid migration 12 to latest upgrade", flush=True)
                 continue
             constraint = "booking_confirmed_user_class" if problem == "duplicate" else "class_time_range"
             if not result.returncode or constraint not in result.stderr:
@@ -118,8 +118,8 @@ def main():
                 result = migrate(database, operation)
                 if result.returncode:
                     raise RuntimeError(result.stderr)
-            if sql(database, "SELECT version || ':' || dirty FROM schema_migrations;") != "13:false":
-                raise RuntimeError("Recovery did not restore clean migration 13")
+            if sql(database, "SELECT version || ':' || dirty FROM schema_migrations;") != str(max(int(p.name.split("_")[0]) for p in (ROOT / "service/mig").glob("*.up.sql"))) + ":false":
+                raise RuntimeError("Recovery did not restore the latest clean migration")
             print("PASS verified rollback-state recovery for " + problem, flush=True)
     finally:
         run(["rm", "-fv", run_id + "-wait", run_id], check=False)

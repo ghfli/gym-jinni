@@ -18,7 +18,7 @@ Table user.user as U {
 Table user.session {
   id uuid [pk]
   user_id int [ref: > U.id]
-  refresh_tkn varchar [not null]
+  refresh_tkn_hash varchar [not null]
   user_agent varchar [not null]
   client_ip inet [not null]
   blocked bool [not null, default: false]

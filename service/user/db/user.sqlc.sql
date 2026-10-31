@@ -26,7 +26,7 @@ WHERE id = $1;
 
 -- name: CreateSession :one
 INSERT INTO "user".session (
-  id, user_id, refresh_tkn, user_agent, client_ip, expires_at, created_at
+  id, user_id, refresh_tkn_hash, user_agent, client_ip, expires_at, created_at
 ) VALUES (
   $1, $2, $3, $4, $5, $6, $7
 )

@@ -95,10 +95,12 @@ class AuthState extends ChangeNotifier {
     }
     final data = jsonDecode(response.body) as Map<String, dynamic>;
     final token = (data['accessTkn'] ?? data['access_tkn'])?.toString();
-    if (token == null || token.isEmpty) {
+    final refresh = (data['refreshTkn'] ?? data['refresh_tkn'])?.toString();
+    if (token == null || token.isEmpty || refresh == null || refresh.isEmpty) {
       throw const FormatException('Incomplete renewal response');
     }
     _accessToken = token;
+    _refreshToken = refresh;
     notifyListeners();
     return true;
   }
@@ -120,6 +122,7 @@ class SessionClient extends http.BaseClient {
       ..maxRedirects = request.maxRedirects
       ..persistentConnection = request.persistentConnection
       ..bodyBytes = bytes;
+    final sentAccess = auth.accessToken;
     final response = await delegate.send(copy());
     final sessionRequest = request.url.path.endsWith('/login_user') ||
         request.url.path.endsWith('/create_user') ||
@@ -127,7 +130,9 @@ class SessionClient extends http.BaseClient {
     if (response.statusCode != 401 || !auth.isLoggedIn || sessionRequest) {
       return response;
     }
-    if (!await auth.renew(delegate)) return response;
+    if (auth.accessToken == sentAccess && !await auth.renew(delegate)) {
+      return response;
+    }
     await response.stream.drain<void>();
     return delegate.send(copy());
   }

@@ -15,7 +15,7 @@ CREATE TABLE "user"."user" (
 CREATE TABLE "user"."session" (
   id uuid PRIMARY KEY,
   user_id int REFERENCES "user"."user" (id),
-  refresh_tkn varchar NOT NULL,
+  refresh_tkn_hash varchar NOT NULL,
   user_agent varchar NOT NULL,
   client_ip inet NOT NULL,
   blocked bool NOT NULL DEFAULT false,
@@ -32,3 +32,5 @@ CREATE TABLE "user".trainer_profile (
   hourly_rate int,
   created_at timestamptz NOT NULL DEFAULT now()
 );
+
+ALTER TABLE "user".session ADD CONSTRAINT session_refresh_hash CHECK (refresh_tkn_hash ~ '^[0-9a-f]{64}$');

@@ -24,7 +24,7 @@ void main() {
       if (request.url.path.endsWith('renew_token')) {
         renewals++;
         expect(jsonDecode(request.body)['refresh_tkn'], 'refresh');
-        return http.Response('{"accessTkn":"new"}', 200);
+        return http.Response('{"accessTkn":"new","refreshTkn":"rotated"}', 200);
       }
       reads++;
       if (reads == 1) return http.Response('{}', 401);
@@ -36,6 +36,7 @@ void main() {
     expect(response.statusCode, 200);
     expect(reads, 2);
     expect(renewals, 1);
+    expect(auth.refreshToken, "rotated");
     client.close();
   });
 
@@ -49,7 +50,8 @@ void main() {
     });
     final first = auth.renew(client);
     final second = auth.renew(client);
-    response.complete(http.Response('{"access_tkn":"new"}', 200));
+    response.complete(
+        http.Response('{"access_tkn":"new","refresh_tkn":"rotated"}', 200));
     expect(await first, isTrue);
     expect(await second, isTrue);
     expect(calls, 1);
@@ -81,7 +83,8 @@ void main() {
     });
     final renewing = auth.renew(client);
     await auth.logout(client);
-    response.complete(http.Response('{"accessTkn":"new"}', 200));
+    response.complete(
+        http.Response('{"accessTkn":"new","refreshTkn":"rotated"}', 200));
     expect(await renewing, isFalse);
     expect(auth.isLoggedIn, isFalse);
     client.close();

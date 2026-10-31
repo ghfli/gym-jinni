@@ -76,3 +76,21 @@ func TestSigningConfiguration(t *testing.T) {
 		})
 	}
 }
+
+func TestRefreshCredentialsAreUnique(t *testing.T) {
+	t.Setenv("JWT_SECRET", "unit-test-signing-secret-at-least-32-bytes")
+	first, _, err := GenerateRefreshToken(7, "same-session")
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, _, err := GenerateRefreshToken(7, "same-session")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first == second {
+		t.Fatal("rotation reused a refresh credential")
+	}
+	if len(RefreshTokenHash(first)) != 64 || RefreshTokenHash(first) == RefreshTokenHash(second) {
+		t.Fatal("invalid refresh credential hash")
+	}
+}

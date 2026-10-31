@@ -130,8 +130,13 @@ func (s *ImUserServiceServer) LoginUser(ctx context.Context,
 		return nil, status.Errorf(codes.InvalidArgument, "invalid email")
 	}
 
-	const q = `SELECT id, email, phone, name, hashed_passwd FROM "user"."user" WHERE email = $1 LIMIT 1`
-	row := s.db.QueryRowContext(ctx, q, u.GetEmail())
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, status.Error(codes.Internal, "begin login")
+	}
+	defer tx.Rollback()
+	const q = `SELECT id, email, phone, name, hashed_passwd FROM "user"."user" WHERE email = $1 LIMIT 1 FOR UPDATE`
+	row := tx.QueryRowContext(ctx, q, u.GetEmail())
 	var id int32
 	var email, phone sql.NullString
 	var name, hashed string
@@ -157,19 +162,22 @@ func (s *ImUserServiceServer) LoginUser(ctx context.Context,
 	}
 
 	now := time.Now()
-	_, err = s.q.CreateSession(ctx, CreateSessionParams{
-		ID:         sessionID,
-		UserID:     sql.NullInt32{Int32: id, Valid: true},
-		RefreshTkn: refreshTkn,
-		UserAgent:  "unknown",
-		ClientIp:   pqtype.Inet{IPNet: net.IPNet{IP: net.ParseIP("0.0.0.0"), Mask: net.CIDRMask(32, 32)}, Valid: true},
-		ExpiresAt:  refreshExp,
-		CreatedAt:  now,
+	_, err = s.q.WithTx(tx).CreateSession(ctx, CreateSessionParams{
+		ID:             sessionID,
+		UserID:         sql.NullInt32{Int32: id, Valid: true},
+		RefreshTknHash: auth.RefreshTokenHash(refreshTkn),
+		UserAgent:      "unknown",
+		ClientIp:       pqtype.Inet{IPNet: net.IPNet{IP: net.ParseIP("0.0.0.0"), Mask: net.CIDRMask(32, 32)}, Valid: true},
+		ExpiresAt:      refreshExp,
+		CreatedAt:      now,
 	})
 	if err != nil {
 		return nil, status.Error(codes.Internal, "persist session")
 	}
 
+	if err := tx.Commit(); err != nil {
+		return nil, status.Error(codes.Internal, "commit login")
+	}
 	return &LoginUserResponse{
 		User: &User{
 			Id:    id,
@@ -192,26 +200,55 @@ func (s *ImUserServiceServer) RenewAccessToken(ctx context.Context,
 		return nil, status.Errorf(codes.Unauthenticated, "invalid refresh token: %v", err)
 	}
 
-	if err := s.ValidateSession(ctx, claims); err != nil {
-		return nil, err
-	}
-	var stored bool
-	err = s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM "user".session WHERE id=$1 AND refresh_tkn=$2)`, claims.SessionID, req.GetRefreshTkn()).Scan(&stored)
+	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return nil, status.Error(codes.Internal, "check refresh token")
+		return nil, status.Error(codes.Internal, "begin renewal")
 	}
-	if !stored {
-		return nil, status.Error(codes.Unauthenticated, "invalid refresh token")
+	defer tx.Rollback()
+	// All authentication mutations lock the user before sessions, including password changes.
+	var userID int32
+	if err := tx.QueryRowContext(ctx, `SELECT id FROM "user"."user" WHERE id=$1 FOR UPDATE`, claims.UserID).Scan(&userID); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, status.Error(codes.Unauthenticated, "invalid session")
+		}
+		return nil, status.Error(codes.Internal, "check account")
 	}
-	accessTkn, accessExp, err := auth.GenerateAccessToken(claims.UserID, claims.Roles, claims.SessionID)
+	var hash string
+	var blocked bool
+	var expires time.Time
+	err = tx.QueryRowContext(ctx, `SELECT refresh_tkn_hash, blocked, expires_at FROM "user".session WHERE id=$1 AND user_id=$2 FOR UPDATE`, claims.SessionID, claims.UserID).Scan(&hash, &blocked, &expires)
+	if err == sql.ErrNoRows || (err == nil && (blocked || !expires.After(time.Now()))) {
+		return nil, status.Error(codes.Unauthenticated, "invalid session")
+	}
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "generate access token: %v", err)
+		return nil, status.Error(codes.Internal, "check session")
 	}
-
-	return &RenewAccessTokenResponse{
-		AccessTkn:      accessTkn,
-		AccessTknExpAt: timeToDateTime(accessExp),
-	}, nil
+	if hash != auth.RefreshTokenHash(req.GetRefreshTkn()) {
+		// A validly signed older credential is a replay; revoke the entire session.
+		if _, err := tx.ExecContext(ctx, `UPDATE "user".session SET blocked=true WHERE id=$1`, claims.SessionID); err != nil {
+			return nil, status.Error(codes.Internal, "revoke replayed session")
+		}
+		if err := tx.Commit(); err != nil {
+			return nil, status.Error(codes.Internal, "commit revocation")
+		}
+		return nil, status.Error(codes.Unauthenticated, "refresh credential reused; sign in again")
+	}
+	access, accessExp, err := auth.GenerateAccessToken(claims.UserID, nil, claims.SessionID)
+	if err != nil {
+		return nil, status.Error(codes.Internal, "generate access token")
+	}
+	refresh, refreshExp, err := auth.GenerateRefreshTokenUntil(claims.UserID, claims.SessionID, expires)
+	if err != nil {
+		return nil, status.Error(codes.Internal, "generate refresh token")
+	}
+	// Keep the original session expiry: renewal does not create an unlimited lifetime.
+	if _, err := tx.ExecContext(ctx, `UPDATE "user".session SET refresh_tkn_hash=$2 WHERE id=$1`, claims.SessionID, auth.RefreshTokenHash(refresh)); err != nil {
+		return nil, status.Error(codes.Internal, "rotate refresh credential")
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, status.Error(codes.Internal, "commit renewal")
+	}
+	return &RenewAccessTokenResponse{AccessTkn: access, AccessTknExpAt: timeToDateTime(accessExp), RefreshTkn: refresh, RefreshTknExpAt: timeToDateTime(refreshExp)}, nil
 }
 
 func (s *ImUserServiceServer) GetTrainerProfile(ctx context.Context,
@@ -325,7 +362,19 @@ func (s *ImUserServiceServer) UpdateUser(ctx context.Context,
 	if err := middleware.RequireOwnerOrAdmin(ctx, s.db, u.GetId()); err != nil {
 		return nil, err
 	}
-	existing, err := s.q.GetUser(ctx, u.GetId())
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, status.Error(codes.Internal, "begin profile update")
+	}
+	defer tx.Rollback()
+	var lockedID int32
+	if err := tx.QueryRowContext(ctx, `SELECT id FROM "user"."user" WHERE id=$1 FOR UPDATE`, u.GetId()).Scan(&lockedID); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, status.Error(codes.NotFound, "user not found")
+		}
+		return nil, status.Error(codes.Internal, "lock account")
+	}
+	existing, err := s.q.WithTx(tx).GetUser(ctx, u.GetId())
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, status.Errorf(codes.NotFound, "user %d not found", u.GetId())
@@ -357,7 +406,7 @@ func (s *ImUserServiceServer) UpdateUser(ctx context.Context,
 		hashed = string(h)
 	}
 
-	if err := s.q.UpdateUser(ctx, UpdateUserParams{
+	if err := s.q.WithTx(tx).UpdateUser(ctx, UpdateUserParams{
 		ID:           u.GetId(),
 		Email:        sql.NullString{String: email, Valid: true},
 		Phone:        sql.NullString{String: phone, Valid: true},
@@ -365,6 +414,17 @@ func (s *ImUserServiceServer) UpdateUser(ctx context.Context,
 		HashedPasswd: hashed,
 	}); err != nil {
 		return nil, status.Errorf(codes.Internal, "update user: %v", err)
+	}
+	if req.GetNewPasswd() != "" {
+		if _, err := tx.ExecContext(ctx, `UPDATE "user"."user" SET passwd_changed_at=now() WHERE id=$1`, u.GetId()); err != nil {
+			return nil, status.Error(codes.Internal, "record password change")
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE "user".session SET blocked=true WHERE user_id=$1`, u.GetId()); err != nil {
+			return nil, status.Error(codes.Internal, "revoke sessions")
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, status.Error(codes.Internal, "commit profile update")
 	}
 	return &UpdateUserResponse{
 		User: &User{Id: u.GetId(), Email: email, Phone: phone, Name: name},
