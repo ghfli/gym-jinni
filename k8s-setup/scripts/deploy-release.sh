@@ -9,7 +9,7 @@ if [[ "${KUBE_NAMESPACE:-$namespace}" != "$namespace" ]]; then
 fi
 script_dir=$(cd "$(dirname "$0")" && pwd)
 # Namespace and database credentials are provisioned by the cluster operator.
-kubectl get namespace "$namespace" >/dev/null
+kubectl get configmaps -n "$namespace" >/dev/null
 bash "$script_dir/ensure-jwt-secret.sh"
 kubectl apply -f "$release_dir/foundation.yml"
 kubectl rollout status statefulset/postgres -n "$namespace" --timeout=300s

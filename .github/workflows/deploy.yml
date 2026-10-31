@@ -60,6 +60,9 @@ jobs:
           ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.service }}:latest
 
   deploy:
+    concurrency:
+      group: gym-jinni-deployment
+      cancel-in-progress: false
     needs: build-and-test
     runs-on: ubuntu-latest
     if: github.event_name == 'workflow_dispatch' && inputs.deploy && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')

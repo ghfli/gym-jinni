@@ -1,0 +1,45 @@
+# Cluster operator applies this once, then issues a kubeconfig for this account.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: gym-jinni-deployer
+  namespace: gym-jinni
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: gym-jinni-deployer
+  namespace: gym-jinni
+rules:
+- apiGroups: ['']
+  resources: [secrets, configmaps, services, persistentvolumeclaims]
+  verbs: [get, list, watch, create, update, patch]
+- apiGroups: ['']
+  resources: [pods]
+  verbs: [get, list, watch]
+- apiGroups: ['']
+  resources: [pods/log]
+  verbs: [get]
+- apiGroups: [apps]
+  resources: [deployments, statefulsets, replicasets]
+  verbs: [get, list, watch, create, update, patch]
+- apiGroups: [batch]
+  resources: [jobs]
+  verbs: [get, list, watch, create, update, patch]
+- apiGroups: [networking.k8s.io]
+  resources: [ingresses]
+  verbs: [get, list, watch, create, update, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: gym-jinni-deployer
+  namespace: gym-jinni
+subjects:
+- kind: ServiceAccount
+  name: gym-jinni-deployer
+  namespace: gym-jinni
+roleRef:
+  kind: Role
+  name: gym-jinni-deployer
+  apiGroup: rbac.authorization.k8s.io

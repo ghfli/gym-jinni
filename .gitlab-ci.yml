@@ -57,6 +57,7 @@ test:deployment:
 
 deploy:kubernetes:
   stage: deploy
+  resource_group: gym-jinni-deployment
   image: python:3.12-slim
   before_script:
     - apt-get update && apt-get install -y --no-install-recommends curl ca-certificates
