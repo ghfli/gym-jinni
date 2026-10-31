@@ -23,3 +23,11 @@ Fast verification: `python3 -m unittest discover -s k8s-setup/tests -v`. Tests c
 The operator can apply `manifests/deployer-rbac.yml` once to create the namespace-scoped deployer account and binding. It cannot administer namespaces, ClusterIssuers or cert-manager CRDs. Namespace-wide Secret access is required by the current create-once key provisioning; this account is trusted within the application namespace. API readiness uses the cluster's normal authenticated discovery permissions. Configure one CI provider as deployment authority per cluster; provider-local serialization does not coordinate independent pipelines across GitHub and GitLab.
 
 Local Ansible also uses the renderer and release gate, keeping its imported image policy and cleaning temporary rendered credentials. Its default ingress is HTTP. For public TLS the cluster operator runs `ACME_EMAIL=operator@example.com bash k8s-setup/scripts/bootstrap-cluster.sh` with cluster-administrator credentials, then deploys the remote profile. This explicit bootstrap installs cert-manager, the issuer, namespace and deployer RBAC; normal releases cannot perform those cluster-wide operations.
+
+Disposable rollout acceptance (requires Docker access, k3d, kubectl, Python dependencies and prebuilt current images):
+
+```sh
+python3 k8s-setup/tests/verify_rollout.py --service-image gym-jinni/service:mvp --ui-image gym-jinni/ui:latest
+```
+
+The harness allocates a unique cluster and private temporary kubeconfig without reading or changing the active context. It exercises startup/reapply, namespace RBAC, old-token rejection/new login after key rotation, and an actual failed Job blocking a proposed application change. Cleanup deletes only that generated cluster. These checks passed locally against the specified cached images; the harness tests backend deployment behavior rather than browser rendering. Re-rendering the local profile changes pod-template annotations so newly imported builds restart even when their local tags are unchanged. Applying the same artifact remains idempotent.

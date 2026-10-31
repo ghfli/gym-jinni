@@ -41,3 +41,9 @@ class RenderReleaseTests(unittest.TestCase):
         for image in ('ghcr.io/o/service:latest', None, 'ghcr.io/O/service:abcdef12'):
             with self.subTest(image=image), self.assertRaises(ValueError):
                 module.render('remote', 'gym.example', image, 'ghcr.io/o/ui:abcdef12')
+
+    def test_local_rerender_rolls_rebuilt_imported_tags(self):
+        def template():
+            docs = module.render('local', 'localhost')
+            return next(d for d in docs['application.yml'] if d['kind'] == 'Deployment')['spec']['template']
+        self.assertNotEqual(template()['metadata']['annotations'], template()['metadata']['annotations'])

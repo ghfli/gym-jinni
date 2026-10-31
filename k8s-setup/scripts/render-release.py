@@ -8,6 +8,7 @@ import argparse
 import copy
 import hashlib
 import re
+import uuid
 from pathlib import Path
 
 import yaml
@@ -46,6 +47,11 @@ def render(profile, domain, service_image=None, ui_image=None, pull_secret=None)
                              (ui_pod['containers'][0], ui_image)):
         container['image'] = image
         container['imagePullPolicy'] = 'Never' if profile == 'local' else 'IfNotPresent'
+    if profile == 'local':
+        # Rebuilt imported tags need a new pod template even when the tag is unchanged.
+        for workload in (backend, ui):
+            deployment = next(x for x in workload if x['kind'] == 'Deployment')
+            deployment['spec']['template']['metadata']['annotations'] = {'gym-jinni/local-build': uuid.uuid4().hex}
     # Credentials are provisioned separately for a remote deployment.
     if profile == 'remote':
         config[0]['data'].pop('DBURL', None)
