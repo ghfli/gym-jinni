@@ -14,7 +14,7 @@ Backend prerequisites include Go, Docker/PostgreSQL, Buf and its configured prot
 
 - `make setup`: Create the local PostgreSQL container/database and apply migrations.
 - `make service`: Generate protobuf/database code, tidy dependencies, and build `cmd/service`.
-- `make bufgen dbsql`: Regenerate API and database bindings after schema/query changes.
+- `make bufgen dbsql`: Regenerate API and database bindings after schema/query changes. `service/gen/` is ignored and must be regenerated before compiling; never commit or hand-edit it. `make bufmup` is intentionally a no-op because per-module `buf dep update` cannot resolve sibling workspace imports; keep committed `buf.lock` pins.
 - `make dbsch`: Regenerate `schema/*.sql` from DBML plus `schema/constraints/*.sql` overlays (optional `dbml2sql`). Preserve the partial booking index and class checks.
 - `make buflint`: Validate protobuf style.
 - `make test`: Build binaries, start PostgreSQL and the service, run gRPC/HTTP smoke clients, then stop the service. Use disposable local data.
@@ -43,3 +43,5 @@ GitHub Actions builds on pushes/PRs to `main`, `master`, and `csr`; only non-PR 
 The Flutter UI has Register/Login and Home, Classes, Bookings, Activity, Profile tabs. Super administrators currently manage roles/permissions and other operational features through the API; no admin screens exist. Keep [spec.md](spec.md) and [validation report](docs/business-process-validation.md) aligned with implemented versus planned behavior; preserve dated historical results as historical evidence.
 
 Node.js is optional host tooling, not a backend/Flutter runtime dependency. Keep shared instructions independent of individual machines and installation paths. See [optional tooling](docs/development.md#optional-nodejs-tooling); CI action runtimes are specified in the workflow.
+
+Local k3d host ports are `39080` (gRPC), `39081` (HTTP API), and `39300` (UI); in-cluster ports are different. Keep these distinctions in client URLs and examples.

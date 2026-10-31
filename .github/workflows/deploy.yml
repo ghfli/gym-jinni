@@ -33,7 +33,10 @@ jobs:
 
     - name: Test deployment guards and cert-manager readiness
       if: matrix.service == 'service'
-      run: python3 -m unittest discover -s k8s-setup/tests -v
+      run: |
+        python3 -m venv "$RUNNER_TEMP/deployment-tests"
+        "$RUNNER_TEMP/deployment-tests/bin/python" -m pip install -r k8s-setup/tests/requirements.txt
+        "$RUNNER_TEMP/deployment-tests/bin/python" -m unittest discover -s k8s-setup/tests -v
 
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v4

@@ -11,3 +11,7 @@ Use these task-specific sources:
 - [Specification](spec.md) and [validation report](docs/business-process-validation.md) for implemented versus planned behavior and dated evidence.
 
 For code changes, use the matching source contracts and relevant checks from these guides. For documentation changes, preserve dated evidence and verify links, commands and implementation claims against source.
+
+## Read first
+
+[AGENTS.md](AGENTS.md) is loaded explicitly for each repository session. Its build rules cover ignored `service/gen/` bindings, required protobuf/sqlc regeneration, pinned Buf dependencies and the intentionally no-op `make bufmup`. Its deployment section records k3d host endpoints. Refer to those rules before running builds or changing client URLs; task-specific guides above provide the commands.

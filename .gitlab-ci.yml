@@ -44,11 +44,26 @@ test:integration:
     - master
     - csr
 
+test:deployment:
+  stage: test
+  image: python:3.12-slim
+  script:
+    - python -m pip install -r k8s-setup/tests/requirements.txt
+    - python -m unittest discover -s k8s-setup/tests -v
+  only:
+    - main
+    - master
+    - csr
+
 deploy:kubernetes:
   stage: deploy
   # Pinned digest for bitnami/kubectl:latest (multi-arch manifest) — bump when upgrading kubectl/Kubernetes.
-  image: bitnami/kubectl@sha256:3a8ef2eba6186625bef5d59129e8118abeba5072d104c6f03e3167a9b1070ae2
+  image:
+    name: bitnami/kubectl@sha256:3a8ef2eba6186625bef5d59129e8118abeba5072d104c6f03e3167a9b1070ae2
+    entrypoint: [""]
   before_script:
+    - command -v bash >/dev/null || { echo 'Deployment image requires bash'; exit 1; }
+    - bash k8s-setup/scripts/check-deployment-tools.sh
     - mkdir -p $HOME/.kube
     - echo "$KUBECONFIG_CONTENT" | base64 -d > $HOME/.kube/config
   script:

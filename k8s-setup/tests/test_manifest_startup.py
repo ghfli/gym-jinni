@@ -3,10 +3,12 @@ import base64
 import json
 import os
 from pathlib import Path
-import re
 import subprocess
 import tempfile
 import unittest
+
+import yaml
+from manifest_utils import named_container
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "k8s-setup/scripts/ensure-jwt-secret.sh"
@@ -133,14 +135,28 @@ class StartupContractTest(unittest.TestCase):
         self.assertGreaterEqual(len(self.stored()), 32)
 
     def test_backend_requires_the_provisioned_secret(self):
-        backend = MANIFEST.read_text().split("      containers:\n", 1)[1]
-        self.assertRegex(backend, r"(?s)- name: JWT_SECRET\s+valueFrom:\s+secretKeyRef:\s+name: gym-jinni-auth\s+key: JWT_SECRET\s+optional: false")
-        self.assertNotIn("APP_ENV", backend)
+        backend = named_container("main-service")
+        env = {item["name"]: item for item in backend["env"]}
+        self.assertEqual(env["JWT_SECRET"]["valueFrom"]["secretKeyRef"],
+                         {"name": "gym-jinni-auth", "key": "JWT_SECRET", "optional": False})
+        self.assertNotIn("APP_ENV", env)
+
+    def test_container_selection_survives_reordering_and_reformatting(self):
+        resources = list(yaml.safe_load_all(MANIFEST.read_text()))
+        deployment = next(item for item in resources if item["kind"] == "Deployment")
+        spec = deployment["spec"]["template"]["spec"]
+        spec["containers"].insert(0, {"name": "sidecar", "image": "fixture"})
+        spec["initContainers"].reverse()
+        reformatted = self.root / "deployment.yml"
+        reformatted.write_text(yaml.safe_dump_all(resources, sort_keys=True, indent=4))
+        self.assertEqual(named_container("main-service", path=reformatted)["name"], "main-service")
+        self.assertEqual(named_container("run-migrations", init=True, path=reformatted),
+                         named_container("run-migrations", init=True))
 
     def test_actual_init_command_preserves_migrate_exit_status(self):
-        block = MANIFEST.read_text().split("      - name: run-migrations\n", 1)[1].split("      containers:\n", 1)[0]
-        command = json.loads(re.search(r"command: (\[.*\])", block).group(1))
-        script = re.search(r"^          - (.+)$", block, re.M).group(1)
+        migration = named_container("run-migrations", init=True)
+        command = migration["command"]
+        args = migration["args"]
         executable = self.root / "migrate"
         executable.write_text("#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$MIGRATE_ARGS\"\nexit \"$MIGRATE_STATUS\"\n")
         executable.chmod(0o700)
@@ -149,11 +165,11 @@ class StartupContractTest(unittest.TestCase):
         for status in [0, 42]:
             with self.subTest(status=status):
                 self.env["MIGRATE_STATUS"] = str(status)
-                result = subprocess.run(command + [script], env=self.env,
+                result = subprocess.run(command + args, env=self.env,
                                         text=True, capture_output=True, timeout=10)
                 self.assertEqual(result.returncode, status)
-                args = (self.root / "migrate-args").read_text().splitlines()
-                self.assertEqual(args, ["-path", "/app/service/mig", "-database", self.env["DBURL"], "up"])
+                recorded_args = (self.root / "migrate-args").read_text().splitlines()
+                self.assertEqual(recorded_args, ["-path", "/app/service/mig", "-database", self.env["DBURL"], "up"])
 
 
 if __name__ == "__main__":
