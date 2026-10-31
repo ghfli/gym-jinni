@@ -6,6 +6,12 @@ on:
   pull_request:
     branches: [ main, master, csr ]
   workflow_dispatch:
+    inputs:
+      deploy:
+        description: Deploy to the configured Kubernetes cluster after building
+        type: boolean
+        required: false
+        default: false
 
 env:
   REGISTRY: ghcr.io
@@ -25,6 +31,10 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
+
+    - name: Test deployment guards and cert-manager readiness
+      if: matrix.service == 'service'
+      run: python3 -m unittest discover -s k8s-setup/tests -v
 
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
@@ -50,7 +60,7 @@ jobs:
   deploy:
     needs: build-and-test
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    if: github.event_name == 'workflow_dispatch' && inputs.deploy && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
 
     steps:
     - name: Checkout code
@@ -61,16 +71,16 @@ jobs:
       with:
         version: 'v1.28.0'
 
-    - name: Configure kubectl
+    - name: Configure and verify Kubernetes access
+      env:
+        KUBECONFIG_BASE64: ${{ secrets.KUBECONFIG }}
       run: |
-        mkdir -p $HOME/.kube
-        echo "${{ secrets.KUBECONFIG }}" | base64 -d > $HOME/.kube/config
+        export KUBECONFIG="$RUNNER_TEMP/gym-jinni-kubeconfig"
+        printf 'KUBECONFIG=%s\n' "$KUBECONFIG" >> "$GITHUB_ENV"
+        bash k8s-setup/scripts/configure-kubectl.sh
 
     - name: Install cert-manager
-      run: |
-        kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.17.2/cert-manager.yaml
-        kubectl wait --for=condition=ready pod -l app.kubernetes.io/instance=cert-manager \
-          -n cert-manager --timeout=120s
+      run: bash k8s-setup/scripts/install-cert-manager.sh
 
     - name: Deploy to Kubernetes
       run: |
@@ -94,3 +104,7 @@ jobs:
         kubectl get pods -n gym-jinni
         kubectl get svc -n gym-jinni
         kubectl get ingress -n gym-jinni
+
+    - name: Remove deployment credentials
+      if: always()
+      run: rm -f "${KUBECONFIG:-$RUNNER_TEMP/gym-jinni-kubeconfig}"

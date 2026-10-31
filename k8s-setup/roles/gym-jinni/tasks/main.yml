@@ -60,18 +60,15 @@
   register: ui_result
   changed_when: "'created' in ui_result.stdout or 'configured' in ui_result.stdout"
 
-- name: Install cert-manager
-  shell: |
-    export KUBECONFIG={{ kubeconfig_path }}
-    kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.17.2/cert-manager.yaml
+- name: Install cert-manager and wait for its admission webhook
+  ansible.builtin.command:
+    argv:
+      - bash
+      - "{{ role_path }}/../../scripts/install-cert-manager.sh"
+  environment:
+    KUBECONFIG: "{{ kubeconfig_path }}"
   register: certmgr_result
   changed_when: "'created' in certmgr_result.stdout or 'configured' in certmgr_result.stdout"
-
-- name: Wait for cert-manager webhooks to be ready
-  shell: |
-    export KUBECONFIG={{ kubeconfig_path }}
-    kubectl wait --for=condition=ready pod -l app.kubernetes.io/instance=cert-manager \
-      -n cert-manager --timeout=120s
 
 - name: Render ClusterIssuer manifest from template
   template:

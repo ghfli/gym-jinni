@@ -303,13 +303,17 @@ kubectl top pods -n gym-jinni
 ### GitHub Actions
 
 The `.github/workflows/deploy.yml` pipeline:
-1. Builds container images with Podman for all services
-2. Pushes to GitHub Container Registry
-3. Deploys to Kubernetes cluster (on push to main/master)
+1. Runs deployment-script regressions and builds service/UI images with Docker Buildx
+2. Pushes images to GitHub Container Registry for pushes and manual runs (pull requests build only)
+3. Deploys to Kubernetes only on an explicit manual deployment from main/master
 
 **Setup:**
 1. Add `KUBECONFIG` secret to GitHub repository (base64 encoded)
-2. Push to main/master branch to trigger deployment
+2. Use a flattened, self-contained kubeconfig with a current context, cluster CA and credentials. Its API endpoint must be reachable from the Actions runner; `localhost` in a local k3d kubeconfig will not reach your machine from a GitHub-hosted runner. Use a suitably connected/self-hosted runner for a private/local cluster.
+3. Pushes and pull requests build/test images only. To deploy, select **Actions → Build and Deploy to K8s → Run workflow**, choose `main` or `master`, and enable **Deploy to the configured Kubernetes cluster after building**. Manual runs without this input build only.
+4. Deployment validates the secret, context and API access before installing cert-manager. It waits for controller, CA injector and webhook rollouts plus a successful server-side admission dry-run before applying the ClusterIssuer. Temporary kubeconfig credentials are removed when the job finishes.
+
+A missing `KUBECONFIG` secret used to produce an empty file and let kubectl fall back to `localhost:8080`, failing in “Install cert-manager.” Missing/invalid credentials now fail in the access-validation step with a configuration-specific error. Do not commit kubeconfig credentials to the repository.
 
 ### GitLab CI
 
