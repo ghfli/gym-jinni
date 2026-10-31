@@ -81,32 +81,23 @@ jobs:
         printf 'KUBECONFIG=%s\n' "$KUBECONFIG" >> "$GITHUB_ENV"
         bash k8s-setup/scripts/configure-kubectl.sh
 
-    - name: Install cert-manager
-      run: bash k8s-setup/scripts/install-cert-manager.sh
+    - name: Render immutable release
+      env:
+        GYM_JINNI_DOMAIN: ${{ vars.GYM_JINNI_DOMAIN }}
+        REGISTRY_PULL_SECRET: ${{ vars.REGISTRY_PULL_SECRET }}
+      run: |
+        python3 -m venv "$RUNNER_TEMP/release-tools"
+        "$RUNNER_TEMP/release-tools/bin/python" -m pip install -r k8s-setup/tests/requirements.txt
+        "$RUNNER_TEMP/release-tools/bin/python" k8s-setup/scripts/render-release.py \
+          --profile remote --domain "$GYM_JINNI_DOMAIN" \
+          --service-image "$REGISTRY/$IMAGE_PREFIX/service:${{ github.sha }}" \
+          --ui-image "$REGISTRY/$IMAGE_PREFIX/ui:${{ github.sha }}" \
+          --pull-secret "$REGISTRY_PULL_SECRET" --output "$RUNNER_TEMP/release"
 
-    - name: Ensure backend signing secret
+    - name: Deploy after successful release migration
       env:
         JWT_SECRET: ${{ secrets.JWT_SECRET }}
-      run: |
-        kubectl apply -f k8s-setup/manifests/namespace.yml
-        bash k8s-setup/scripts/ensure-jwt-secret.sh
-
-    - name: Deploy to Kubernetes
-      run: |
-        kubectl apply -f k8s-setup/manifests/namespace.yml
-        kubectl apply -f k8s-setup/manifests/secrets.yml
-        kubectl apply -f k8s-setup/manifests/configmaps.yml
-        kubectl apply -f k8s-setup/manifests/postgres-statefulset.yml
-        kubectl apply -f k8s-setup/manifests/main-service-deployment.yml
-        kubectl apply -f k8s-setup/manifests/ui-deployment.yml
-        kubectl apply -f k8s-setup/manifests/cluster-issuer.yml
-        kubectl apply -f k8s-setup/manifests/ingress.yml
-
-    - name: Wait for deployments
-      run: |
-        kubectl wait --for=condition=ready pod -l app=postgres -n gym-jinni --timeout=300s
-        kubectl wait --for=condition=ready pod -l app=main-service -n gym-jinni --timeout=300s
-        kubectl wait --for=condition=ready pod -l app=ui -n gym-jinni --timeout=300s
+      run: bash k8s-setup/scripts/deploy-release.sh "$RUNNER_TEMP/release"
 
     - name: Verify deployment
       run: |

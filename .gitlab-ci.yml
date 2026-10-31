@@ -57,26 +57,24 @@ test:deployment:
 
 deploy:kubernetes:
   stage: deploy
-  # Pinned digest for bitnami/kubectl:latest (multi-arch manifest) — bump when upgrading kubectl/Kubernetes.
-  image:
-    name: bitnami/kubectl@sha256:3a8ef2eba6186625bef5d59129e8118abeba5072d104c6f03e3167a9b1070ae2
-    entrypoint: [""]
+  image: python:3.12-slim
   before_script:
-    - command -v bash >/dev/null || { echo 'Deployment image requires bash'; exit 1; }
+    - apt-get update && apt-get install -y --no-install-recommends curl ca-certificates
+    - curl -fsSLo /tmp/kubectl https://dl.k8s.io/release/v1.28.0/bin/linux/amd64/kubectl
+    - curl -fsSLo /tmp/kubectl.sha256 https://dl.k8s.io/release/v1.28.0/bin/linux/amd64/kubectl.sha256
+    - bash -ec 'printf "%s  /tmp/kubectl\n" "$(cat /tmp/kubectl.sha256)" | sha256sum --check'
+    - install -m 0755 /tmp/kubectl /usr/local/bin/kubectl
+    - python -m pip install -r k8s-setup/tests/requirements.txt
     - bash k8s-setup/scripts/check-deployment-tools.sh
-    - mkdir -p $HOME/.kube
-    - echo "$KUBECONFIG_CONTENT" | base64 -d > $HOME/.kube/config
+    - export KUBECONFIG=/tmp/gym-jinni-kubeconfig
+    - chmod 600 "$KUBECONFIG"
+    - export KUBECONFIG_BASE64="$KUBECONFIG_CONTENT"
+    - bash k8s-setup/scripts/configure-kubectl.sh
   script:
-    - kubectl apply -f k8s-setup/manifests/namespace.yml
-    - bash k8s-setup/scripts/ensure-jwt-secret.sh
-    - kubectl apply -f k8s-setup/manifests/secrets.yml
-    - kubectl apply -f k8s-setup/manifests/configmaps.yml
-    - kubectl apply -f k8s-setup/manifests/postgres-statefulset.yml
-    - kubectl apply -f k8s-setup/manifests/main-service-deployment.yml
-    - kubectl apply -f k8s-setup/manifests/ui-deployment.yml
-    - kubectl apply -f k8s-setup/manifests/ingress.yml
-    - kubectl rollout status deployment/main-service -n gym-jinni
-    - kubectl rollout status deployment/ui -n gym-jinni
+    - python k8s-setup/scripts/render-release.py --profile remote --domain "$GYM_JINNI_DOMAIN" --service-image "$CI_REGISTRY_IMAGE/service:$CI_COMMIT_SHORT_SHA" --ui-image "$CI_REGISTRY_IMAGE/ui:$CI_COMMIT_SHORT_SHA" --pull-secret "${REGISTRY_PULL_SECRET:-}" --output /tmp/gym-jinni-release
+    - bash k8s-setup/scripts/deploy-release.sh /tmp/gym-jinni-release
+  after_script:
+    - rm -f /tmp/gym-jinni-kubeconfig
   only:
     - main
     - master
