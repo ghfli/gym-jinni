@@ -62,11 +62,19 @@ make migfr            # force-set migration version (use after manual fix)
 make dbps             # psql into gj
 make teardn           # migrate down + drop db + remove container
 
-# Integration test (the only test harness in this repo)
-make test             # build all, start postgres, run cmd/service, then cmd/grpcclt and cmd/httpclt.sh
+# Tests
+go test ./...                              # unit tests (needs gen/ — run make bufgen first)
+go test -run TestName ./middleware         # single test
+scripts/validate-business.sh               # isolated integration suite (see below)
+make test                                  # smoke test: start postgres + cmd/service, run cmd/grpcclt and cmd/httpclt.sh
 ```
 
-There is **no Go unit-test suite**; `make test` is an end-to-end check that boots the server and drives it with a gRPC client (`cmd/grpcclt.go`) and a curl script (`cmd/httpclt.sh`). To test one thing, edit those clients or hit the HTTP gateway directly.
+Testing layers:
+- **Unit tests** live beside the code (`auth/`, `class/`, `middleware/`, `cmd/bootstrap-admin/`). Some import `gen/go/...`, so codegen must run before `go test`.
+- **Integration suite** `integration/business_test.go` skips unless `VALIDATION_HTTP_BASE` / `VALIDATION_DBURL` / `VALIDATION_JWT_SECRET` are set. Run it through `scripts/validate-business.sh`. The script builds the service image from `Dockerfile.service`, starts a throwaway Postgres + service on a private Docker network, applies `mig/*.up.sql`, runs the `bootstrap-admin` and `integration` tests, round-trips the latest migrations, and then removes everything. It never touches the dev DB. Requirements are traced in `docs/business-process-validation.md`.
+- **Smoke clients** `cmd/grpcclt.go` and `cmd/httpclt.sh` drive a running server; extend them for API changes and cover authorization denials as well as successes.
+
+`cmd/bootstrap-admin` promotes an existing user to the first administrator by writing to the DB directly (`DBURL=... go run ./cmd/bootstrap-admin -user-id N`). On purpose, there is no HTTP way to do this.
 
 Docker targets in the Makefile use `sudo`. Requires on PATH: `buf`, `sqlc`, `migrate`, and protoc plugins (`protoc-gen-go`, `protoc-gen-go-grpc`, `protoc-gen-grpc-gateway`, `protoc-gen-govalidators`). `DBURL` defaults to `postgresql://root:gj@127.0.0.1:5432/gj?sslmode=disable&search_path=public`. `JWT_SECRET` defaults to `gym-jinni-dev-secret-change-in-prod`.
 
@@ -95,3 +103,40 @@ Local cluster: `k8s-setup/setup.sh` (Ansible + k3d via the rootful Podman socket
 ## VM dev option
 
 `vagrant up` provisions an Arch Linux VM via `Vagrantfile` + `setup-alx.sh`. To set the toolchain up directly on the host instead, run/read `setup-alx.sh`.
+
+<!-- imported-from: codex:project:instructions -->
+# Repository Guidelines
+
+## Project Structure & Module Organization
+
+- `service/`: Single Go module and binary (gRPC `:8080`, HTTP gateway `:8081`) organised into per-domain modules: `user`, `class`, `rbac`, `booking`, `gym`, `schedule`, `payment`, `notification`, `activity`, `report`. Auth helpers live in `auth/` (JWT) and `middleware/` (authorization interceptor, method-to-permission map).
+- Each module keeps API definitions in `<module>/pb/`, DBML schema and SQL queries in `<module>/db/`, and business logic in `<module>/<module>.go`. Migrations are in `service/mig/`, committed sqlc schema in `service/schema/`, smoke clients in `service/cmd/`. Generated code goes to `gen/` and is not committed.
+- `ui/`: Flutter application; Dart source in `lib/`, widget tests in `test/`, platform assets in the platform directories and `web/`.
+- `k8s-setup/`: k3d/Ansible cluster automation, Dockerfiles (`container/`) and manifests. CI is in `.github/workflows/deploy.yml` and `.gitlab-ci.yml`.
+- `Vagrantfile` and `setup-alx.sh` describe the VM development environment; `GymJinni_system_design.png` illustrates the target architecture; `spec.md` is the software specification.
+
+## Build, Test, and Development Commands
+
+Backend prerequisites include Go, Docker/PostgreSQL, Buf and its configured protobuf plugins, sqlc, golang-migrate, and optionally dbml2sql. Run targets inside `service/`:
+
+- `make setup`: Create the local PostgreSQL container/database and apply migrations.
+- `make service`: Generate protobuf/database code, tidy dependencies, and build `cmd/service`.
+- `make bufgen dbsql`: Regenerate API and database bindings after schema/query changes.
+- `make dbsch`: Regenerate `schema/*.sql` from DBML (needs `dbml2sql`).
+- `make buflint`: Validate protobuf style.
+- `make test`: Build binaries, start PostgreSQL and the service, run gRPC/HTTP smoke clients, then stop the service. Use disposable local data.
+- Set `DBURL` before running `./cmd/service` directly; `JWT_SECRET` overrides the development signing secret.
+
+From `ui/`, run `flutter pub get`, `flutter run -d chrome --dart-define=API_BASE=...`, and `flutter build web`. Respect the Dart SDK constraint in `pubspec.yaml`. Local cluster setup is `k8s-setup/setup.sh`; images are built with Podman.
+
+## Coding Style & Naming Conventions
+
+Format Go with `gofmt` (tabs) and Dart with `dart format lib test` (two-space indentation). Use lowercase Go package names, exported `PascalCase` identifiers, and Dart `snake_case.dart` filenames. Run `flutter analyze`; lint rules come from `flutter_lints`. Edit protobuf, DBML, and SQL sources rather than generated bindings. Add numbered migration pairs such as `000012_description.up.sql` and `.down.sql`. When adding a module, add it to `SVCS` in the Makefile, the Dockerfile's sqlc loop, and register it in both functions of `service.go`.
+
+## Testing Guidelines
+
+There are no Go unit tests yet. Use Go's standard framework with `*_test.go` files alongside implementation and run `go test ./...` in `service/` after generation. Flutter uses `flutter_test`; name tests `*_test.dart` and run `flutter test`. No coverage threshold is configured. Extend `cmd/grpcclt.go` and `cmd/httpclt.sh` for API changes and test authorization denials as well as successful requests.
+
+## Commit & Pull Request Guidelines
+
+History uses short, descriptive subjects such as `adjust setup-alx.sh`; no strict prefix convention is established. Keep commits focused. PRs should explain behavior changes, link relevant issues, list validation commands/results, and include screenshots for UI changes. Document migration, configuration, and API impacts.
