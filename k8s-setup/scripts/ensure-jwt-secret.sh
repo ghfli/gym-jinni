@@ -1,30 +1,46 @@
 #!/usr/bin/env bash
-# Create once, reuse on redeploy; never print or silently rotate signing keys.
+# Create once and compare opaque key bytes exactly; rotation is a separate command.
 set -euo pipefail
 export LC_ALL=C
-namespace="${KUBE_NAMESPACE:-gym-jinni}"
+namespace=gym-jinni
 secret_name=gym-jinni-auth
-
-valid_key() {
-  [[ ${#1} -ge 32 && "$1" != gym-jinni-dev-secret-change-in-prod ]]
-}
-if [[ -n "${JWT_SECRET:-}" ]] && ! valid_key "$JWT_SECRET"; then
-  echo 'JWT_SECRET must be a non-development signing key of at least 32 bytes.' >&2
+if [[ "${KUBE_NAMESPACE:-$namespace}" != "$namespace" ]]; then
+  echo 'KUBE_NAMESPACE must be gym-jinni to match the checked-in manifests.' >&2
   exit 1
 fi
 
-# Return 2 only when absent. Permissions, decoding and invalid key errors fail closed.
+umask 077
+temp_dir=$(mktemp -d)
+secret_file="$temp_dir/candidate"
+stored_file="$temp_dir/stored"
+trap 'rm -f "$secret_file" "$stored_file"; rmdir "$temp_dir"' EXIT
+valid_key_file() {
+  local size non_nul_size
+  size=$(wc -c < "$1")
+  non_nul_size=$(tr -d '\000' < "$1" | wc -c)
+  [[ "$size" -ge 32 && "$size" -eq "$non_nul_size" ]] || return 1
+  ! cmp -s "$1" <(printf '%s' 'gym-jinni-dev-secret-change-in-prod')
+}
+if [[ -n "${JWT_SECRET:-}" ]]; then
+  printf '%s' "$JWT_SECRET" > "$secret_file"
+  if ! valid_key_file "$secret_file"; then
+    echo 'JWT_SECRET must be a non-development signing key of at least 32 bytes without NUL bytes.' >&2
+    exit 1
+  fi
+fi
+
+# Return 2 only when absent. Decode into a file: $(...) would strip key newlines.
 read_existing() {
   local record encoded
   record=$(kubectl get secret "$secret_name" -n "$namespace" --ignore-not-found \
     -o 'jsonpath={.metadata.name}{"\n"}{.data.JWT_SECRET}') || return 1
   [[ -n "$record" ]] || return 2
-  if [[ "$record" != *$'\n'* ]]; then return 1; fi
+  [[ "$record" == *$'\n'* ]] || return 1
   encoded=${record#*$'\n'}
-  stored_key=$(printf '%s' "$encoded" | base64 --decode 2>/dev/null) || return 1
-  valid_key "$stored_key" || return 1
-  if [[ -n "${JWT_SECRET:-}" && "$JWT_SECRET" != "$stored_key" ]]; then
-    echo 'JWT_SECRET differs from the existing signing key; use an explicit key-rotation procedure.' >&2
+  printf '%s' "$encoded" | base64 --decode > "$stored_file" 2>/dev/null || return 1
+  valid_key_file "$stored_file" || return 1
+  if [[ -n "${JWT_SECRET:-}" ]] && ! cmp -s "$secret_file" "$stored_file"; then
+    echo 'JWT_SECRET differs from the cluster key. Use rotate-jwt-secret.py --key-file FILE, then align the CI secret.' >&2
     return 1
   fi
 }
@@ -38,14 +54,7 @@ else
     exit 1
   fi
 fi
-
-umask 077
-temp_dir=$(mktemp -d)
-secret_file="$temp_dir/JWT_SECRET"
-trap 'rm -f "$secret_file"; rmdir "$temp_dir"' EXIT
-if [[ -n "${JWT_SECRET:-}" ]]; then
-  printf '%s' "$JWT_SECRET" > "$secret_file"
-else
+if [[ ! -s "$secret_file" ]]; then
   head -c 48 /dev/urandom | base64 | tr -d '\n' > "$secret_file"
 fi
 if kubectl create secret generic "$secret_name" -n "$namespace" \
@@ -53,8 +62,7 @@ if kubectl create secret generic "$secret_name" -n "$namespace" \
   echo 'JWT signing secret created.'
   exit 0
 fi
-# Concurrent deploys may create the secret first. Accept a valid winning key,
-# but still reject permissions/network errors or a conflicting explicit value.
+# Concurrent initial deployments may create the Secret first.
 if read_existing; then
   echo 'JWT signing secret already configured.'
   exit 0

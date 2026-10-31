@@ -30,10 +30,8 @@
       - "{{ role_path }}/../../scripts/ensure-jwt-secret.sh"
   environment:
     KUBECONFIG: "{{ kubeconfig_path }}"
-    JWT_SECRET: "{{ lookup('env', 'JWT_SECRET') }}"
   register: jwt_secret_result
   changed_when: "'created' in jwt_secret_result.stdout"
-  no_log: true
 
 - name: Apply configmaps
   shell: |

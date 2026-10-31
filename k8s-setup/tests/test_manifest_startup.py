@@ -24,8 +24,25 @@ if args[:2] == ['get', 'secret']:
     if mode == 'get-denied': sys.exit(1)
     if store.exists():
         data = json.loads(store.read_text())
-        print('gym-jinni-auth\n' + data.get('JWT_SECRET', ''))
+        if 'json' in args:
+            print(json.dumps({'metadata': {'name': 'gym-jinni-auth', 'resourceVersion': '1'}, 'data': data}))
+        else:
+            print('gym-jinni-auth\n' + data.get('JWT_SECRET', ''))
     sys.exit(0)
+if args[:2] == ['get', 'deployment']:
+    sys.exit(1 if mode == 'deployment-missing' else 0)
+if args[:2] == ['patch', 'secret']:
+    if mode == 'patch-conflict': sys.exit(1)
+    filename = args[args.index('--patch-file') + 1]
+    assert stat.S_IMODE(pathlib.Path(filename).stat().st_mode) == 0o600
+    patch = json.loads(pathlib.Path(filename).read_text())
+    assert patch[0] == {'op': 'test', 'path': '/metadata/resourceVersion', 'value': '1'}
+    data = json.loads(store.read_text())
+    data['JWT_SECRET'] = patch[1]['value']
+    store.write_text(json.dumps(data))
+    sys.exit(0)
+if args[:2] == ['rollout', 'restart'] or args[:2] == ['rollout', 'status']:
+    sys.exit(1 if mode == 'rollout-failure' else 0)
 if args[:3] == ['create', 'secret', 'generic']:
     if mode == 'create-denied': sys.exit(1)
     if mode == 'race':
@@ -53,6 +70,7 @@ class StartupContractTest(unittest.TestCase):
                         TMPDIR=str(self.root))
         self.env.pop("JWT_SECRET", None)
         self.env.pop("FAKE_MODE", None)
+        self.env.pop("KUBE_NAMESPACE", None)
         executable = self.root / "kubectl"
         executable.write_text(FAKE_KUBECTL)
         executable.chmod(0o700)
@@ -81,7 +99,7 @@ class StartupContractTest(unittest.TestCase):
         self.assertEqual(self.stored(), key)
         calls = [json.loads(line) for line in self.log.read_text().splitlines()]
         self.assertEqual(sum(call[:2] == ["create", "secret"] for call in calls), 1)
-        self.assertFalse(list(self.root.glob("tmp*/JWT_SECRET")))
+        self.assertFalse([path for path in self.root.iterdir() if path.is_dir()])
 
     def test_explicit_key_is_preserved_without_logging(self):
         key = "operator-provided-private-signing-key-with-32-bytes"
@@ -119,7 +137,94 @@ class StartupContractTest(unittest.TestCase):
         result = self.run_helper("replacement-signing-key-that-is-at-least-32-bytes")
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual(self.store.read_bytes(), before)
-        self.assertIn("explicit key-rotation", result.stderr)
+        self.assertIn("rotate-jwt-secret.py", result.stderr)
+
+    def test_newline_bytes_are_preserved_in_creation_and_comparison(self):
+        key = "operator-signing-key-at-least-32-bytes" + "\n\n"
+        self.assertEqual(self.run_helper(key).returncode, 0)
+        self.assertEqual(self.stored(), key)
+        self.assertEqual(self.run_helper(key).returncode, 0)
+        self.assertNotEqual(self.run_helper(key.rstrip("\n")).returncode, 0)
+        self.assertEqual(self.stored(), key)
+
+    def test_short_key_cannot_pass_due_to_trimmed_newlines(self):
+        self.seed("short\n")
+        self.assertNotEqual(self.run_helper().returncode, 0)
+
+    def test_namespace_mismatch_fails_before_access(self):
+        self.env["KUBE_NAMESPACE"] = "another-namespace"
+        result = self.run_helper()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("match the checked-in manifests", result.stderr)
+        self.assertFalse(self.log.exists())
+
+    def test_rotation_rejects_unsafe_files_and_namespace_before_access(self):
+        tool = ROOT / "k8s-setup/scripts/rotate-jwt-secret.py"
+        key_file = self.root / "replacement"
+        key_file.write_text("replacement-signing-key-at-least-32-bytes")
+        key_file.chmod(0o644)
+        result = subprocess.run(["python3", str(tool), "--key-file", str(key_file)], env=self.env,
+                                text=True, capture_output=True, timeout=10)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse(self.log.exists())
+        key_file.chmod(0o600)
+        key_file.write_bytes(b"replacement-signing-key-at-least-32-bytes\0")
+        result = subprocess.run(["python3", str(tool), "--key-file", str(key_file)], env=self.env,
+                                text=True, capture_output=True, timeout=10)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse(self.log.exists())
+        key_file.write_text("replacement-signing-key-at-least-32-bytes")
+        self.env["KUBE_NAMESPACE"] = "wrong-namespace"
+        result = subprocess.run(["python3", str(tool), "--key-file", str(key_file)], env=self.env,
+                                text=True, capture_output=True, timeout=10)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse(self.log.exists())
+
+    def test_rotation_uses_cas_preserves_other_data_and_restarts(self):
+        key = "replacement-signing-key-at-least-32-bytes\n"
+        self.seed("original-signing-key-that-is-at-least-32-bytes")
+        data = json.loads(self.store.read_text())
+        data["other-key"] = "dW5jaGFuZ2Vk"
+        self.store.write_text(json.dumps(data))
+        key_file = self.root / "replacement"
+        key_file.write_text(key)
+        key_file.chmod(0o600)
+        tool = ROOT / "k8s-setup/scripts/rotate-jwt-secret.py"
+        for _ in range(2):
+            result = subprocess.run(["python3", str(tool), "--key-file", str(key_file)],
+                                    env=self.env, text=True, capture_output=True, timeout=10)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertNotIn(key, result.stdout + result.stderr)
+        self.assertEqual(self.stored(), key)
+        self.assertEqual(json.loads(self.store.read_text())["other-key"], "dW5jaGFuZ2Vk")
+        calls = [json.loads(line) for line in self.log.read_text().splitlines()]
+        self.assertEqual(sum(call[:2] == ["patch", "secret"] for call in calls), 1)
+        self.assertEqual(sum(call[:2] == ["rollout", "restart"] for call in calls), 2)
+        self.assertFalse(any(call[0] == "delete" for call in calls))
+
+    def test_rotation_conflict_and_failed_rollout_are_visible_and_retryable(self):
+        tool = ROOT / "k8s-setup/scripts/rotate-jwt-secret.py"
+        key_file = self.root / "replacement"
+        key_file.write_text("replacement-signing-key-at-least-32-bytes")
+        key_file.chmod(0o600)
+        original = "original-signing-key-at-least-32-bytes"
+        self.seed(original)
+        for mode in ["deployment-missing", "patch-conflict"]:
+            self.env["FAKE_MODE"] = mode
+            result = subprocess.run(["python3", str(tool), "--key-file", str(key_file)], env=self.env,
+                                    text=True, capture_output=True, timeout=10)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertEqual(self.stored(), original)
+        self.env["FAKE_MODE"] = "rollout-failure"
+        result = subprocess.run(["python3", str(tool), "--key-file", str(key_file)], env=self.env,
+                                text=True, capture_output=True, timeout=10)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("rollout is incomplete", result.stderr)
+        self.assertEqual(self.stored(), key_file.read_text())
+        self.env["FAKE_MODE"] = ""
+        result = subprocess.run(["python3", str(tool), "--key-file", str(key_file)], env=self.env,
+                                text=True, capture_output=True, timeout=10)
+        self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_read_or_create_denial_is_not_treated_as_success(self):
         for mode in ["get-denied", "create-denied"]:
