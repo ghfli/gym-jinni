@@ -55,28 +55,20 @@ Set `DBURL` for that application database and replace `123` with the registered 
 
 ## Optional Node.js tooling
 
-Node.js is optional workstation tooling; backend and Flutter builds do not require a Node application/package installation. GitHub actions run on their own native Node.js 24 runtimes, independent of the workstation version.
+Node.js is optional workstation tooling; backend and Flutter builds do not require a Node application/package installation. Choose a supported stable or LTS release from the [official downloads](https://nodejs.org/en/download), using your operating system's installation mechanism or a version manager. Installation paths and package-manager configuration belong to each workstation, not repository requirements.
 
-Observed workstation baseline on 2026-10-31:
-
-| Tool | Installed version |
-| --- | --- |
-| Node.js | 26.13.0 LTS |
-| npm / npx | 11.20.0 |
-| Corepack | 0.36.0 |
-
-The active installation is `/opt/node-v26.13.0-linux-x64`; `/usr/local/bin/node`, `npm`, `npx`, and `corepack` select it. `/opt/node-v20.10.0-linux-x64` remains as a rollback copy, not the active runtime. Other machines may use a version manager or their own installation paths. Verify the selected commands with:
+Check the tools selected by your shell:
 
 ```bash
 node --version
 npm --version
 npx --version
-corepack --version
 command -v node
-readlink -f /usr/local/bin/node
 ```
 
-When upgrading, consult official release metadata, exclude prereleases, verify archive digests, test in temporary storage and preserve existing global tools before changing system links. The last upgrade verified the Node archive against official SHA-256 sums and Corepack against its official GitHub release digest. This host's npm registry TLS validation failed, so Corepack was installed offline from that verified release asset; certificate verification was kept enabled. Resolve the registry trust issue before relying on networked npm/package-manager operations.
+If you use Corepack, check/install it according to its supported Node.js versions and your package-manager needs. Verify official release checksums when installing archives manually, preserve needed global tools, and test the new installation before switching your shell. Resolve certificate-trust problems through the environment's CA configuration; do not disable TLS verification.
+
+GitHub actions run on their own native Node.js 24 runtimes, independent of the workstation version. The workflow is the source for action versions; a host Node.js upgrade does not migrate those actions.
 
 ## CI and deployment
 

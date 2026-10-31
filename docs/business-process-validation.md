@@ -212,7 +212,18 @@ Final API run: 11.272 seconds after build/migration; local artifacts `/tmp/gj-va
 
 ## Later CI/tooling verification (2026-10-31)
 
-- Deployment kubeconfig validation and cert-manager CRD/rollout/admission readiness have nine mock-based regressions. They passed with workflow lint, shell syntax and Ansible syntax checks during the deployment fix. GitHub deploy now requires explicit manual opt-in and a configured runner-reachable kubeconfig; no live installation was performed without credentials.
+- Deployment kubeconfig validation and cert-manager CRD/rollout/admission readiness have mock-based regression coverage. They passed with workflow lint, shell syntax and Ansible syntax checks during the deployment fix. GitHub deploy now requires explicit manual opt-in and a configured runner-reachable kubeconfig; no live installation was performed without credentials.
 - The workflow's five action types were checked against their released metadata: each declares node24 and accepts the configured inputs. Workflow lint passed after the upgrade; the runtime-forcing override is removed. This is a workflow metadata/lint result, not a claim that a new remote matrix run completed.
-- The optional host Node.js installation was upgraded to 26.13.0 LTS with npm/npx 11.20.0 and Corepack 0.36.0. Archives were verified and all four commands smoke-tested before/after system link changes; the old installation remains for rollback. This does not change the actions' independent runtime.
-- This documentation audit verifies links, documented contracts/paths and shell snippet syntax without rerunning destructive cluster setup or claiming new application test results. Current deployment templates still need signing-secret wiring, registry/image-policy alignment, raw-domain rendering and migration error handling (OPS-05).
+- This documentation audit verifies links, documented contracts/paths and shell snippet syntax without rerunning destructive cluster setup or claiming new application test results. The later deployment review fixes signing-secret provisioning/references and fail-closed migration init; registry/image-policy alignment and raw-domain rendering remain under OPS-05.
+
+
+## Deployment review regression coverage
+
+The deployment suite now tests key generation/reuse, explicit-key preservation/conflicts, invalid Secret data, access failures and concurrent creation. It also executes the actual init command extracted from the manifest with success/failure fixtures, checks the mandatory Secret reference, and ensures migration failures are not converted into success. Use the test command for the current test count.
+
+See [deployment operations](../k8s-setup/README.md) for the shared provisioning helper and migration diagnosis, and [specification follow-up](../spec.md#18-deployment-review-follow-up) for delivered versus remaining work. Real PostgreSQL migration evidence is recorded after isolated verification rather than inferred from mocks.
+
+
+Isolated review verification used the exact init command and arguments read from the Deployment, the existing migration CLI image and a disposable PostgreSQL instance/network with the current migration directory mounted read-only. Fresh installation, already-current/no-change and a valid upgrade from migration 12 returned success. Migration 13 against duplicate confirmed bookings and invalid class ranges returned nonzero with the expected constraint errors. The test database/container/network were removed afterward. This proves migration exit behavior without claiming a live Kubernetes rollout.
+
+Deployment regressions cover the persistent Secret and startup contracts, including private temporary key files and failure propagation. Workflow lint, shell syntax and Ansible syntax checks pass. The current test count is reported by `python3 -m unittest discover -s k8s-setup/tests -v`, rather than embedded in active runbooks.

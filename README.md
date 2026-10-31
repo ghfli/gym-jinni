@@ -67,11 +67,11 @@ Use `http://127.0.0.1:39081` for a local k3d gateway. The deployed web image use
 
 Register/login, Home, Classes, My Bookings, Activity and Profile are implemented. A database operator provisions the first Super administrator with `go run ./cmd/bootstrap-admin -user-id N` from `service/`; subsequent grants use the authenticated RBAC API. There are currently no trainer/owner/admin management pages. Payments are stored records and notifications are an inbox; provider settlement, external delivery and other remaining workflows are tracked in the specification.
 
-When configured, the local cluster publishes web UI at `http://localhost:39300`, HTTP API at `http://localhost:39081/v1/`, and gRPC at `localhost:39080`. Local manifests require a signing secret and deployment-specific configuration; consult the deployment guide before running the full setup.
+When configured, the local cluster publishes web UI at `http://localhost:39300`, HTTP API at `http://localhost:39081/v1/`, and gRPC at `localhost:39080`. Local deployment provisions/reuses the required signing Secret and blocks startup on migration errors; deployment-specific database/domain/image configuration still requires review; consult the deployment guide before running the full setup.
 
 ## CI and deployment
 
-GitHub builds on pushes/PRs to `main`, `master`, and `csr`; non-PR runs publish images. Deployments require a manual workflow run on `main`/`master` with `deploy` enabled and a valid base64 `KUBECONFIG` secret for a reachable cluster. The actions use native Node.js 24. GitLab builds with Podman and also deploys manually. The workstation Node.js version is separate from the Actions runtime; see the development guide for the observed Node.js 26 LTS installation.
+GitHub builds on pushes/PRs to `main`, `master`, and `csr`; non-PR runs publish images. Deployments require a manual workflow run on `main`/`master` with `deploy` enabled and a valid base64 `KUBECONFIG` secret for a reachable cluster. The actions use native Node.js 24. GitLab builds with Podman and also deploys manually. The workstation Node.js version is separate from the Actions runtime; see the development guide for portable host tooling guidance.
 
 ## Contributing
 

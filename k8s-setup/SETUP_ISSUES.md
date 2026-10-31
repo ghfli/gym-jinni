@@ -8,11 +8,11 @@ The recorded cert-manager job failed before installation because its missing KUB
 
 ## Backend refuses to start
 
-Inspect `kubectl logs deployment/main-service -n gym-jinni`. Startup requires a dedicated JWT_SECRET of at least 32 bytes; the base manifest currently supplies only DBURL. Wire a secret reference as described in README before accepting the deployment. `APP_ENV=development` is an explicit local-only fallback, not a deployed fix. Old JWTs without session/purpose claims require login again.
+Inspect `kubectl logs deployment/main-service -n gym-jinni`. Startup requires a dedicated JWT_SECRET of at least 32 bytes; the base manifest reads the required gym-jinni-auth/JWT_SECRET Secret. Ansible/CI provision it automatically; direct manifest users must run the shared helper first. `APP_ENV=development` is an explicit local-only fallback, not a deployed fix. Old JWTs without session/purpose claims require login again.
 
 ## Migration or data-integrity failure
 
-Review the `run-migrations` init-container logs and migration version. Migration 000013 rejects duplicate active bookings and invalid class time/capacity values; review existing records instead of automatically deleting/cancelling them. The current init-container command masks failures with `|| true`, so a started pod does not prove migrations succeeded. Do not force migration versions or run destructive rollback against shared data as a routine check.
+Review the `run-migrations` init-container logs and migration version. Migration 000013 rejects duplicate active bookings and invalid class time/capacity values; review existing records instead of automatically deleting/cancelling them. The init container now propagates errors: a failed or dirty migration prevents backend startup, while an already current schema succeeds without changes. Do not force migration versions or run destructive rollback against shared data as a routine check.
 
 ## Missing images or ImagePullBackOff
 
@@ -39,3 +39,31 @@ The workflow has migrated checkout/build-push/login/setup-buildx/setup-kubectl t
 Generic Podman containers running MicroK8s/snap encountered AppArmor install-hook failures. Direct K3s experiments encountered overlay snapshotter, /dev/kmsg and cgroup permission failures. Archived roles/playbooks preserve those experiments, but they are not current setup instructions. k3d is the active lifecycle wrapper; host kernel/engine support still matters. Earlier unmeasured two-minute setup and blanket reliability claims are not validation evidence.
 
 For test commands and dated outcomes, see the [validation report](../docs/business-process-validation.md). Changes to application behavior and remaining product/operations work belong in [spec.md](../spec.md).
+
+
+## Signing Secret missing, invalid or mismatched
+
+Use a valid kubeconfig for the intended cluster. From the repository root:
+
+```bash
+kubectl get namespace gym-jinni
+bash k8s-setup/scripts/ensure-jwt-secret.sh
+kubectl get secret gym-jinni-auth -n gym-jinni
+```
+
+The last command shows metadata, not key values. The helper reuses a valid existing key; a short/default key, missing JWT_SECRET data, denied access or conflicting explicit environment value returns an error. Do not delete a working Secret to make a conflict disappear: that is a signing-key rotation. Check the intended environment/secret-manager value and use the [rotation procedure](README.md#signing-key-lifecycle) deliberately.
+
+## Migration 000013 blocks a rollout
+
+```bash
+kubectl get pods -n gym-jinni -l app=main-service
+POD=replace-with-failing-pod
+kubectl logs -n gym-jinni "$POD" -c run-migrations
+kubectl describe pod -n gym-jinni "$POD"
+```
+
+Read the named database constraint/error first. Back up the target database; review duplicate confirmed user/class bookings or invalid class ranges/capacities with the data owner. Correct records through an approved recovery procedure, check the migration's dirty/version state, then retry. Do not reintroduce `|| true`, drop constraints, or force a version merely to make pods ready. A failing init is the expected protection, not a reason to start the application against a partial schema.
+
+## Verify the documented configuration without a live deployment
+
+From the repository root, run `python3 -m unittest discover -s k8s-setup/tests -v`, and from `k8s-setup/` run `ansible-playbook --syntax-check -i inventory.yml playbooks/deploy-services.yml`. The test output is the authoritative current count. These checks do not replace rollout inspection or a backup/restore test against the actual deployment.

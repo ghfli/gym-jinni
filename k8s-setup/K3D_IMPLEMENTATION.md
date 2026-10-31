@@ -18,6 +18,20 @@ Earlier experiments attempted MicroK8s/snap and direct K3s inside generic Podman
 
 The service image now performs canonical protobuf/sqlc generation, lint and Go package checks. Local images use Docker/import; GitHub uses Buildx/native Node.js 24 actions and an explicit manual deploy input. Missing/invalid CI kubeconfig credentials fail before cert-manager installation. Ansible/GitHub share deployment rollout and webhook-admission readiness checks.
 
-The current templates still require signing-secret wiring, deployment-specific database/domain values, image distribution alignment and explicit migration verification. Review [configuration gaps](README.md#configure-before-deploying). Destructive teardown remains opt-in; no fixed performance/availability guarantees are established by this migration.
+The templates require a provisioned signing Secret and propagate migration failures. Ansible/GitHub/GitLab now provision/reuse the key before backend apply. Deployment-specific database/domain values and image distribution alignment still need configuration. Review [configuration gaps](README.md#configure-before-deploying). Destructive teardown remains opt-in; no fixed performance/availability guarantees are established by this migration.
 
 See [validation evidence](../docs/business-process-validation.md) and [troubleshooting](SETUP_ISSUES.md) for dated checks and failure cases.
+
+
+## Engine and deployment tracing
+
+From `k8s-setup/`, the default cluster path is `setup.sh` → `playbooks/setup-cluster-k3d.yml` → `roles/k3d/`. Build/import/deploy stages are in `playbooks/deploy-services.yml`. The shared key helper is invoked by the deployment role after namespace/database Secret application; its generated value is cluster state, not a rendered checked-in manifest.
+
+```bash
+sudo -E k3d cluster list
+sudo -E k3d node list
+kubectl get nodes
+kubectl get pods -n gym-jinni
+```
+
+Use the same engine socket for these commands and for image imports. To diagnose image/startup failure, follow [SETUP_ISSUES.md](SETUP_ISSUES.md); to change configuration, update [group variables](group_vars/all.yml) and review the relevant manifests. The kubeconfig context, signing Secret and migration state are separate prerequisites and should be checked independently.

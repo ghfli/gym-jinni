@@ -25,21 +25,26 @@ Optional `kubectl port-forward` can use local ports 8080/8081 or 3000 without co
 
 1. Set the target engine and domain. `group_vars/all.yml` reads `DOCKER_HOST` and `GYM_JINNI_DOMAIN`; it also defines ingress class and ACME email. Review these values for your environment. Ansible renders ingress/issuer templates; raw `manifests/ingress.yml` contains a domain placeholder and kubectl does not expand it.
 2. Replace development database values in `manifests/secrets.yml` / `configmaps.yml` using your deployment secret/configuration process. The checked-in values are not production credentials.
-3. Supply a dedicated `JWT_SECRET` of at least 32 bytes to the backend. The current base Deployment includes only `DBURL`; it does not wire a signing secret. Create the namespace/secret in the intended cluster, then add a secret reference alongside the existing backend `DBURL` environment entry. Do not set `APP_ENV=development` for deployed environments.
-4. Review database migrations through `000013`. Resolve duplicate confirmed bookings or invalid class ranges/capacities before `000013`. The checked-in migration init-container currently masks failures with `|| true`; explicitly confirm migration success/version before accepting a deployment.
+3. The backend references the required `gym-jinni-auth` Secret, key `JWT_SECRET`. Ansible, GitHub and GitLab deployment paths run the shared provisioning helper before applying the Deployment. It generates a private random key only when the Secret is absent and reuses a valid existing key. An optional `JWT_SECRET` environment variable supplies an operator-managed key on first creation. Keys must be at least 32 bytes and cannot be the development default; deployed environments do not use `APP_ENV=development`.
+4. Review database migrations through `000013`. Resolve duplicate confirmed bookings or invalid class ranges/capacities before `000013`. The init container runs `exec migrate ... up` with failure propagation: migration errors leave the pod in an init failure state and prevent the application from starting. An already current schema is a successful no-change run.
 5. Match manifest image references/pull policy to the image distribution method. Local roles import `gym-jinni/service:latest` and `gym-jinni/ui:latest`; the manifests use `imagePullPolicy: Never`. GitHub publishes GHCR tags, so a remote deployment needs matching registry references, pull policy and private-registry access. The current workflow does not substitute these references for you.
 
-Example backend environment entry, appended to the Deployment's existing `env` list after you have provisioned `gym-jinni-auth` in the same namespace:
+For direct manifest deployment, provision the namespace/signing Secret first (commands from the repository root):
 
-```yaml
-- name: JWT_SECRET
-  valueFrom:
-    secretKeyRef:
-      name: gym-jinni-auth
-      key: JWT_SECRET
+```bash
+kubectl apply -f k8s-setup/manifests/namespace.yml
+bash k8s-setup/scripts/ensure-jwt-secret.sh
 ```
 
-Create secrets using your normal secret-management mechanism; do not commit their values. The configuration gaps above are tracked in [OPS-05](../spec.md#12-deployment-operations-and-quality).
+The helper never prints key material or overwrites an existing key. Invalid/missing existing key data, access failures and a conflicting explicit `JWT_SECRET` fail closed. Concurrent initial deployments reuse the valid winning Secret. Key files used during creation are private and removed on exit. Do not commit a shared signing key to `manifests/secrets.yml`; that file contains only the development database Secret.
+
+Remaining image/registry and raw-ingress rendering gaps are tracked in [OPS-05](../spec.md#12-deployment-operations-and-quality).
+
+## Signing-key lifecycle
+
+All replicas read the same required Secret through `secretKeyRef`. Ordinary redeployments must preserve it; deleting it causes the next deployment to generate a different key. If an operator provides an optional CI `JWT_SECRET`, it must match an existing key or the helper stops rather than silently rotating it.
+
+For deliberate rotation, back up/protect the current key through your secret-management system, update the Secret in the target cluster, then restart all backend replicas with `kubectl rollout restart deployment/main-service -n gym-jinni` and wait for the rollout. Environment variables in existing containers do not refresh automatically. Old tokens will no longer validate; users must log in again. The helper performs initial provisioning and validation, not automatic rotation/replay handling.
 
 ## Local setup and operations
 
@@ -96,11 +101,11 @@ Protect the resulting file as application data. Adjust the account/database for 
 - Deployment is opt-in: select **Actions → Build and Deploy to K8s → Run workflow**, choose `main` or `master`, and enable **Deploy to the configured Kubernetes cluster after building**. Other manual runs build only.
 - Add a base64-encoded `KUBECONFIG` Actions secret. It must be self-contained (CA/credentials embedded or available on the runner), have a current context, and select an API reachable from the runner. `localhost` in a developer's kubeconfig does not reach that developer's cluster from a GitHub-hosted runner. Configure an appropriate connected runner/network for private/local clusters.
 - `scripts/configure-kubectl.sh` validates base64, context, selected server and API access before installation. It writes a private temporary file without printing credentials; the workflow removes it in an always-run cleanup step.
-- Review the image, signing-secret and raw-manifest rendering requirements above. The job's existence is not evidence of a production-ready deployment.
+- The optional Actions `JWT_SECRET` is passed only to the provisioning helper; an absent value generates on first use or reuses the cluster Secret. Review the image and raw-manifest rendering requirements above. The job's existence is not evidence of a production-ready deployment.
 
 ### GitLab CI
 
-[Pipeline](../.gitlab-ci.yml) builds/pushes with Podman and offers a manual main/master deployment using base64 `KUBECONFIG_CONTENT`. Its integration job builds the service image (package checks), not the isolated HTTP suite. The GitLab deploy path does not install cert-manager or apply a ClusterIssuer; provision those prerequisites separately and review its raw manifests/image references. It does not share the GitHub kubeconfig helper automatically.
+[Pipeline](../.gitlab-ci.yml) builds/pushes with Podman and offers a manual main/master deployment using base64 `KUBECONFIG_CONTENT`. Its integration job builds the service image (package checks), not the isolated HTTP suite. The deploy job provisions/reuses the signing Secret before applying the backend; an optional protected/masked `JWT_SECRET` variable can supply the initial key. The GitLab deploy path does not install cert-manager or apply a ClusterIssuer; provision those prerequisites separately and review its raw manifests/image references. It does not share the GitHub kubeconfig helper automatically.
 
 ## cert-manager and deployment checks
 
@@ -110,7 +115,26 @@ From the repository root:
 
 ```bash
 python3 -m unittest discover -s k8s-setup/tests -v
-bash -n k8s-setup/scripts/configure-kubectl.sh k8s-setup/scripts/install-cert-manager.sh
+bash -n k8s-setup/scripts/*.sh
 ```
 
-Nine mock-based deployment-script regressions passed during the CI fix; they do not install cert-manager in a real cluster. With Ansible installed, check playbook syntax from this directory using `ansible-playbook --syntax-check -i inventory.yml playbooks/deploy-services.yml`. See [validation evidence](../docs/business-process-validation.md), [troubleshooting](SETUP_ISSUES.md) and [implementation summary](IMPLEMENTATION_SUMMARY.md).
+The command above reports the current regression count. Mocks cover credential/readiness failures, signing-secret lifecycle and migration command exit status; they do not install cert-manager in a real cluster. With Ansible installed, check playbook syntax from this directory using `ansible-playbook --syntax-check -i inventory.yml playbooks/deploy-services.yml`. See [validation evidence](../docs/business-process-validation.md), [troubleshooting](SETUP_ISSUES.md) and [implementation summary](IMPLEMENTATION_SUMMARY.md).
+
+
+## Diagnose blocked startup
+
+```bash
+kubectl get pods -n gym-jinni -l app=main-service
+kubectl get events -n gym-jinni --sort-by=.lastTimestamp
+```
+
+Choose the failing pod from the first command, then inspect its init/app logs without printing Secrets:
+
+```bash
+POD=replace-with-failing-pod
+kubectl logs -n gym-jinni "$POD" -c run-migrations
+kubectl describe pod -n gym-jinni "$POD"
+kubectl logs -n gym-jinni "$POD" -c main-service
+```
+
+A missing required Secret prevents the application container from being created; rerun the helper against the intended namespace. A failed migration keeps the app blocked; investigate the error and database state before retrying. For duplicate/class-constraint failures, back up the database and review the affected records rather than automatically cancelling bookings or forcing the migration version. See [troubleshooting runbooks](SETUP_ISSUES.md).

@@ -165,7 +165,7 @@ Tooling: Go, Buf, sqlc, golang-migrate, PostgreSQL; Docker images locally/GitHub
 - **OPS-02:** Propagate gRPC startup failures to the process, close resources, shut down gracefully, and add readiness/liveness checks.
 - **OPS-03:** Define backup/restore and migration rollback procedures. Keep destructive teardown targets (`make teardn`) out of routine validation.
 - **OPS-04:** Keep the module list in sync across the Makefile `SVCS`, the Dockerfile sqlc loop, and `service.go`. `report` has no DB layer and is excluded from sqlc.
-- **OPS-05 (remaining):** Wire a deployment-specific signing secret into the backend manifest; align GHCR image references/pull policy with CI output; render raw ingress placeholders before kubectl apply; stop masking migration init-container failures and verify migration version; provision cert-manager/issuer prerequisites explicitly in GitLab. The current local templates and CI configuration do not implement these production deployment steps end-to-end. See [deployment prerequisites](k8s-setup/README.md#configure-before-deploying).
+- **OPS-05 (remaining):** Signing-secret references/provisioning and fail-closed migration init are implemented. Remaining work: align GHCR image references/pull policy with CI output; render raw ingress placeholders before kubectl apply; define production migration recovery/backup procedures; provision cert-manager/issuer prerequisites explicitly in GitLab. The current local templates and CI configuration do not implement these production deployment steps end-to-end. See [deployment prerequisites](k8s-setup/README.md#configure-before-deploying).
 - **QUALITY-01:** High availability, consistency, and low latency are design goals; no numeric SLOs exist. Establish them before adding caches, replication, or distributed services.
 
 ## 13. Verification and delivery
@@ -246,8 +246,17 @@ Still planned: refresh-token rotation/replay detection and password-change revoc
 
 ## 17. Tooling and deployment documentation status (2026-10-31)
 
-GitHub deployment is now an explicit `workflow_dispatch` run with `deploy` enabled on main/master; pushes/PRs build/test and only non-PR runs publish. Kubeconfig decoding/context/API reachability checks precede cert-manager installation. Local Ansible and GitHub use shared rollout and bounded admission-readiness checks; GitLab has a separate manual deploy path. Nine deployment-script regressions and workflow/Ansible syntax checks passed during that fix; no live cluster installation was claimed.
+GitHub deployment is now an explicit `workflow_dispatch` run with `deploy` enabled on main/master; pushes/PRs build/test and only non-PR runs publish. Kubeconfig decoding/context/API reachability checks precede cert-manager installation. Local Ansible and GitHub use shared rollout and bounded admission-readiness checks; GitLab has a separate manual deploy path. Deployment-script regressions and workflow/Ansible syntax checks passed during that fix; no live cluster installation was claimed.
 
-The workflow actions now use native Node.js 24 and the forcing override is removed. Optional workstation tooling is observed at Node.js 26.13.0 LTS, npm/npx 11.20.0 and Corepack 0.36.0; it is independent of CI action runtimes and not a backend/Flutter runtime requirement. Version/path and rollback details are in the [development guide](docs/development.md#optional-nodejs-tooling).
+The workflow actions use native Node.js 24 and the forcing override is removed. Optional host Node.js tooling is independent of CI runtimes; the [development guide](docs/development.md#optional-nodejs-tooling) gives portable selection/verification guidance without prescribing a workstation layout.
 
 The documentation audit corrected stale no-unit-test/default-secret/Podman-default/automatic-deploy claims and links to nonexistent test reports. It preserved earlier runtime evidence as dated history and identified OPS-05 configuration gaps from the current manifests. No application code, runtime behavior or live deployment is changed by this documentation revision.
+
+
+## 18. Deployment review follow-up
+
+The backend manifest now requires `gym-jinni-auth/JWT_SECRET`; shared deployment provisioning creates a random key only if absent, validates existing/optional explicit keys and refuses implicit rotation. Ansible, GitHub and GitLab invoke it before applying the backend. Missing required Secret data blocks container creation; deployed configuration does not enable development fallback.
+
+The migration init command uses `exec migrate ... up` with error propagation. PostgreSQL connectivity/schema/data failures block application startup; no-change succeeds. Regression tests exercise the exact manifest command's exit status and signing-key lifecycle. OPS-05 retains the distinct registry/rendering/recovery work still outstanding.
+
+Contributor instructions are centralized in AGENTS.md; CLAUDE.md links them. Validation script examples consistently run from the repository root. Active guides use test-command output instead of fixed counts, and shared tooling guidance is machine-independent. Shorter Kubernetes guides were reviewed individually and expanded with source/execution maps and concrete startup/secret/migration diagnosis.
