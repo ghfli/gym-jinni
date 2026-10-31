@@ -152,3 +152,5 @@ kubectl logs -n gym-jinni "$POD" -c main-service
 A missing required Secret prevents the application container from being created; rerun the helper against the intended namespace. A failed migration keeps the app blocked; follow the [migration recovery decision and reproduction guide](MIGRATION_RECOVERY.md) before retrying. For duplicate/class-constraint failures, back up the database and review the affected records rather than automatically cancelling bookings or forcing the migration version. See [troubleshooting runbooks](SETUP_ISSUES.md).
 
 The committed real-database harness is `python3 k8s-setup/tests/verify_migrations.py`; its prerequisites, cold-start/upgrade/failure/recovery cases and resource cleanup are documented in the recovery guide. See the [focused follow-up plan](../docs/deployment-improvement-plan.md) for separate, bounded improvements beyond this review.
+
+Rendered release deployment and CI prerequisites are documented in [releases](RELEASES.md). Remote CI uses immutable images and a migration Job before application rollout.
