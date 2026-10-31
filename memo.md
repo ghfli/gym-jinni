@@ -1,3 +1,9 @@
+# Historical VM and environment proposals
+
+Historical reference only, reviewed 2026-10-31. The discussion below includes proposed wrapper scripts, alternate Vagrantfiles and compose examples that are not necessarily implemented or validated. Use [current development instructions](docs/development.md), the actual [Vagrantfile](Vagrantfile) / [setup-alx.sh](setup-alx.sh), and the [deployment guide](k8s-setup/README.md) for supported paths. The current default cluster engine is Docker/k3d; optional workstation Node.js and CI runtimes are documented separately. Examples below are preserved as proposals, not current setup instructions.
+
+---
+
 Let me check your existing setup scripts to understand your current approach:
 
 [2 tools called]

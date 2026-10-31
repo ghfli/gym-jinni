@@ -1,465 +1,116 @@
-# Kubernetes Test Environment for gym-jinni
+# Kubernetes setup and deployment
 
-This directory contains the complete setup for a Kubernetes cluster using k3d, orchestrated by Ansible, with CI/CD pipelines for the gym-jinni project.
+Reviewed 2026-10-31 against the scripts/manifests. Start with the [quick start](QUICKSTART.md), [development guide](../docs/development.md) and [specification](../spec.md). The manifests are local-development templates and need the configuration below before a successful deployment is expected.
 
-## Architecture
+## Architecture and prerequisites
 
-- **k3d cluster** (K3s in Linux containers via Podman) with 1 server + 2 agent nodes
-  - Lightweight Kubernetes distribution; k3d drives the engine through the Docker-compatible API (`DOCKER_HOST`)
-  - Handles all cgroup and AppArmor complexities automatically
-  - Fast setup and teardown
-- **Services deployed**:
-  - PostgreSQL (StatefulSet with persistent storage)
-  - CSR Service (RBAC) - same `main-service` endpoints as user/class API (gRPC `8080`, HTTP `8081` in-cluster; see `configmaps.yml`)
-  - Main Service (User/Class) - gRPC: 8080, HTTP: 8081 (in-cluster)
-  - UI (Flutter web) - Service port 80, **NodePort** `30000` (required so k3d LB `39300:30000` reaches the pods)
-- **Host access via k3d load balancer** (`roles/k3d/defaults/main.yml`): `39080`, `39081`, `39300` on localhost (avoids binding `808x`/`3000` on the host so `kubectl port-forward` and local dev tools can use those ports)
-- **Ansible** playbooks for automation
-- **CI/CD** pipelines (GitHub Actions & GitLab CI)
+The current path is Ansible + k3d (K3s in containers) using the Docker API. Docker is the default: `unix:///var/run/docker.sock`. `group_vars/all.yml` accepts `DOCKER_HOST`; the setup wrapper can use the rootful Podman API socket when no Docker socket exists. The installed `docker` CLI must reach the same engine used by k3d. Local build roles call `sudo docker build`, then `sudo -E k3d image import --mode direct`. Do not mix image stores between engines.
 
-## Prerequisites
+Install Docker or an explicitly configured compatible engine/CLI, Ansible, kubectl and Python 3 on the host. Confirm `docker info` (or `sudo docker info`) works. k3d is installed by the cluster role if absent; its version/default topology are in [defaults](roles/k3d/defaults/main.yml). WSL requires a running compatible daemon and an environment that supports the required networking/cgroups; the repository does not guarantee every nested-container configuration works.
 
-Install the following on your host machine:
+By default the cluster has one server and two agents. PostgreSQL is a StatefulSet with persistent storage; one backend Deployment serves all ten domains including RBAC, and one UI Deployment serves Flutter via nginx. The main-service/UI manifests request two replicas; this does not establish an availability SLO. Traefik is supplied by K3s.
 
-```bash
-# Ubuntu/Debian
-sudo apt-get update
-sudo apt-get install -y ansible python3-pip podman kubectl
-sudo systemctl enable --now podman.socket
+| Access | Host endpoint | In-cluster/NodePort |
+| --- | --- | --- |
+| UI | http://localhost:39300 | Service 80 / NodePort 30000 |
+| HTTP gateway | http://localhost:39081/v1/ | 8081 / 30081 |
+| gRPC | localhost:39080 | 8080 / 30080 |
+| Kubernetes API | localhost:6443 by default | Configured kubeconfig endpoint |
+| Ingress HTTP / HTTPS | Host ports 80 / 443 | Traefik; domain/TLS must be configured |
+| PostgreSQL | Not published by default | Service 5432 |
 
-# Arch Linux
-sudo pacman -S ansible podman kubectl
-sudo systemctl enable --now podman.socket
+Optional `kubectl port-forward` can use local ports 8080/8081 or 3000 without conflicting with the 39xxx load-balancer mappings. A browser on another computer needs the deployment hostname/IP rather than its own localhost. The five post-login UI tabs are customer-oriented; administrative management is currently API-only ([RBAC guide](../service/RBAC.md)).
 
-# macOS (Homebrew; enable the Podman machine / socket per Podman docs)
-brew install ansible podman kubectl
+## Configure before deploying
+
+1. Set the target engine and domain. `group_vars/all.yml` reads `DOCKER_HOST` and `GYM_JINNI_DOMAIN`; it also defines ingress class and ACME email. Review these values for your environment. Ansible renders ingress/issuer templates; raw `manifests/ingress.yml` contains a domain placeholder and kubectl does not expand it.
+2. Replace development database values in `manifests/secrets.yml` / `configmaps.yml` using your deployment secret/configuration process. The checked-in values are not production credentials.
+3. Supply a dedicated `JWT_SECRET` of at least 32 bytes to the backend. The current base Deployment includes only `DBURL`; it does not wire a signing secret. Create the namespace/secret in the intended cluster, then add a secret reference alongside the existing backend `DBURL` environment entry. Do not set `APP_ENV=development` for deployed environments.
+4. Review database migrations through `000013`. Resolve duplicate confirmed bookings or invalid class ranges/capacities before `000013`. The checked-in migration init-container currently masks failures with `|| true`; explicitly confirm migration success/version before accepting a deployment.
+5. Match manifest image references/pull policy to the image distribution method. Local roles import `gym-jinni/service:latest` and `gym-jinni/ui:latest`; the manifests use `imagePullPolicy: Never`. GitHub publishes GHCR tags, so a remote deployment needs matching registry references, pull policy and private-registry access. The current workflow does not substitute these references for you.
+
+Example backend environment entry, appended to the Deployment's existing `env` list after you have provisioned `gym-jinni-auth` in the same namespace:
+
+```yaml
+- name: JWT_SECRET
+  valueFrom:
+    secretKeyRef:
+      name: gym-jinni-auth
+      key: JWT_SECRET
 ```
 
-**Podman socket:** Setup uses `DOCKER_HOST` when set. Otherwise it uses `/var/run/docker.sock`, falling back to the **rootful** Podman socket at `/run/podman/podman.sock` when only that socket exists. Ansible also honors `DOCKER_HOST`; override `k3d_docker_host` in inventory if needed. Builds run with `sudo`, so use the rootful engine for k3d too. If your shell points to an inactive rootless socket, run `DOCKER_HOST=unix:///run/podman/podman.sock ./setup.sh`.
+Create secrets using your normal secret-management mechanism; do not commit their values. The configuration gaps above are tracked in [OPS-05](../spec.md#12-deployment-operations-and-quality).
 
-**Note:** k3d is invoked with `sudo -E` so `DOCKER_HOST` from Ansible reaches the same engine `podman build` uses under `sudo`.
+## Local setup and operations
 
-### Additional host setup (Debian/Kali, WSL2)
-
-The scripts and roles call `docker`, so on a Podman-only host install the Docker shim, and apply the fixes below as needed. These are host-level changes; they are not made by `setup.sh`.
+From this directory:
 
 ```bash
-# `docker` command + /var/run/docker.sock -> /run/podman/podman.sock
-sudo apt-get install -y podman-docker
-
-# k3d is installed to /usr/local/bin by the playbook, but sudo's secure_path
-# omits that directory, so `sudo k3d` fails. Expose it in /usr/bin:
-sudo ln -sf /usr/local/bin/k3d /usr/bin/k3d
-
-# WSL2 kernels often lack the nftables modules netavark needs ("nft did not
-# return successfully while applying ruleset"). Use netavark's iptables driver
-# for the Podman API service (used by k3d) ...
-sudo mkdir -p /etc/systemd/system/podman.service.d
-printf '[Service]\nEnvironment=NETAVARK_FW=iptables\n' | \
-  sudo tee /etc/systemd/system/podman.service.d/netavark-fw.conf
-sudo systemctl daemon-reload && sudo systemctl restart podman.socket
-
-# ... and for `sudo podman/docker build` (sudo drops the environment):
-echo 'NETAVARK_FW=iptables' | sudo tee /etc/sudo_env
-echo 'Defaults env_file=/etc/sudo_env' | sudo tee /etc/sudoers.d/netavark-fw
-sudo chmod 440 /etc/sudoers.d/netavark-fw && sudo visudo -c
+./setup.sh --skip-build --skip-deploy
+export KUBECONFIG="$HOME/.kube/gym-jinni-config"
+kubectl get nodes
 ```
 
-Notes:
-
-- `setup.sh` exports `ANSIBLE_CONFIG` itself because Ansible ignores `./ansible.cfg` in world-writable directories such as `/mnt/c` on WSL.
-- Podman stores local images as `localhost/<name>`; the build roles therefore tag and import images as `docker.io/gym-jinni/*`, which matches the manifests' `gym-jinni/*:latest` with `imagePullPolicy: Never`.
-- Image imports use k3d's direct mode so they do not depend on a helper container mounting the default Docker socket.
-- If a failed run leaves a half-deleted cluster, remove it before re-running: `sudo k3d cluster delete gym-jinni`.
-
-## Quick Start
-
-### 1. Setup the entire environment
+This provisions the cluster only. After reviewing/configuring the manifests and credentials above:
 
 ```bash
-cd k8s-setup
-chmod +x setup.sh
-./setup.sh
-```
-
-This will:
-1. Install k3d (if not already installed)
-2. Create a k3d cluster with 1 server + 2 agents
-3. Configure kubectl access
-4. Build container images for all services (Podman)
-5. Deploy all services to Kubernetes
-
-Set `GYM_JINNI_DOMAIN` to override the ingress hostname and TLS certificate domain:
-
-```bash
-GYM_JINNI_DOMAIN=gym.example.com ./setup.sh
-```
-
-An unset or empty value defaults to `gjdev.itcorker.com`. The same variable works
-when invoking the Ansible deployment playbook directly. Ansible renders the
-ingress template automatically. To apply `manifests/ingress.yml` manually, render
-its environment placeholders first (requires `envsubst`):
-
-```bash
-export GYM_JINNI_DOMAIN="${GYM_JINNI_DOMAIN:-gjdev.itcorker.com}"
-envsubst '${GYM_JINNI_DOMAIN}' < manifests/ingress.yml | kubectl apply -f -
-```
-
-### 2. Access the cluster
-
-```bash
-# Set KUBECONFIG (already done by setup.sh)
-export KUBECONFIG=$HOME/.kube/gym-jinni-config
-
-# View pods
-kubectl get pods -n gym-jinni
-
-# View services
-kubectl get svc -n gym-jinni
-
-# View ingress
-kubectl get ingress -n gym-jinni
-```
-
-### 3. Access services
-
-After `./setup.sh`, the k3d server load balancer publishes **high host ports** so they do not overlap `docker-proxy` bindings that used to block `3000` and `8080`–`8083`.
-
-**Default (via k3d LB on localhost):**
-
-- Main Service gRPC: `localhost:39080`
-- Main Service HTTP: http://localhost:39081/v1/roles
-- CSR (RBAC): same URLs as main service (`CSR_SERVICE_*` in `configmaps.yml` points at `main-service:8080` / `:8081`)
-- UI: http://localhost:39300
-
-**Optional: `kubectl port-forward`** (uses the same numeric ports on your machine as in the cluster):
-
-```bash
-# Main + CSR APIs (same Deployment / Service)
-kubectl port-forward -n gym-jinni svc/main-service 8080:8080 8081:8081
-
-# UI
-kubectl port-forward -n gym-jinni svc/ui 3000:80
-
-# PostgreSQL (for debugging)
-kubectl port-forward -n gym-jinni svc/postgres 5432:5432
-```
-
-Then access (port-forward path):
-
-- Main / CSR HTTP: http://localhost:8081/v1/roles
-- UI: http://localhost:3000
-
-### 4. Teardown
-
-```bash
-cd k8s-setup
-chmod +x teardown.sh
-./teardown.sh
-```
-
-Teardown uses the same `DOCKER_HOST` selection as setup. To target the rootful
-Podman engine explicitly:
-
-```bash
-DOCKER_HOST=unix:///run/podman/podman.sock ./teardown.sh
-```
-
-Use `--force` to skip prompts and remove the two application image tags as well.
-Cleanup targets the Gym-Jinni cluster and images; it does not run a system-wide
-container prune. Cluster and image deletion failures stop the script.
-
-## Manual Setup (Step by Step)
-
-If you want more control, run Ansible playbooks manually:
-
-### 1. Setup cluster
-
-```bash
-cd k8s-setup
-ansible-playbook playbooks/setup-cluster-k3d.yml
-```
-
-### 2. Build and deploy services
-
-```bash
-# Build images only
 ansible-playbook playbooks/deploy-services.yml --tags build
-
-# Deploy services only
 ansible-playbook playbooks/deploy-services.yml --tags deploy
-
-# Both
-ansible-playbook playbooks/deploy-services.yml
+ansible-playbook playbooks/deploy-services.yml --tags verify
 ```
 
-### 3. Configure kubectl
+`./setup.sh` runs cluster creation, build and deploy together; `--skip-build` and `--skip-deploy` select stages. Timings depend on caches, network and host resources; there is no verified two-minute setup guarantee. Run Ansible from this directory so it uses [ansible.cfg](ansible.cfg). The wrapper explicitly sets `ANSIBLE_CONFIG` for WSL/world-writable working directories. The deployment plays use the invoking user's kubeconfig; their individual build operations invoke sudo as required.
 
 ```bash
-export KUBECONFIG=$HOME/.kube/gym-jinni-config
-kubectl get nodes
+kubectl get pods,svc,ingress -n gym-jinni
+kubectl logs deployment/main-service -n gym-jinni
+kubectl logs deployment/ui -n gym-jinni
+kubectl get events -n gym-jinni --sort-by=.lastTimestamp
+sudo -E k3d cluster list
+sudo -E k3d cluster stop gym-jinni
+sudo -E k3d cluster start gym-jinni
 ```
 
-## Directory Structure
+Keep the same `DOCKER_HOST` across setup/import/start/stop operations. For a deliberate Podman alternative on Linux, enable its rootful socket and set `DOCKER_HOST=unix:///run/podman/podman.sock`; also ensure the `docker` CLI used by the roles addresses that engine. These are environment-specific prerequisites, not a claim that Docker and Podman can share their image stores.
 
-```
-k8s-setup/
-├── ansible.cfg                 # Ansible configuration
-├── inventory.yml               # Simplified inventory for localhost
-├── playbooks/
-│   ├── setup-cluster-k3d.yml   # Setup k3d cluster
-│   └── deploy-services.yml     # Build + deploy services
-├── roles/
-│   ├── k3d/                    # Install k3d and create cluster
-│   ├── build-ui-image/         # Build UI container image (Podman)
-│   ├── build-service-image/    # Build service container image (Podman)
-│   └── gym-jinni/              # Deploy to K8s
-├── manifests/
-│   ├── namespace.yml
-│   ├── secrets.yml
-│   ├── configmaps.yml
-│   ├── postgres-statefulset.yml
-│   ├── main-service-deployment.yml
-│   ├── ui-deployment.yml
-│   └── ingress.yml
-├── container/
-│   ├── Dockerfile.service
-│   └── Dockerfile.ui
-├── group_vars/
-│   └── all.yml                 # k3d DOCKER_HOST / Podman socket paths
-├── archive/                    # Old Podman/MicroK8s/K3s implementation
-├── setup.sh                    # One-command setup
-├── teardown.sh                 # One-command cleanup
-└── README.md                   # This file
-```
+`./teardown.sh` prompts before deleting cluster/application resources and optionally images. Persistent database data may be lost; this is not a routine check. `kubectl scale deployment main-service --replicas=N -n gym-jinni` changes replica count but does not provide a database backup or an availability guarantee. Back up the intended PostgreSQL database and test restoration before destructive work.
 
-## Useful Commands
+## Database backup example
 
-### Cluster Management
+For the default development account, a logical backup can be taken without copying credentials into a command:
 
 ```bash
-# View cluster nodes
-kubectl get nodes
-
-# View all resources in gym-jinni namespace
-kubectl get all -n gym-jinni
-
-# Describe a pod
-kubectl describe pod <pod-name> -n gym-jinni
-
-# View logs
-kubectl logs -f deployment/main-service -n gym-jinni
-kubectl logs -f deployment/main-service -n gym-jinni
-kubectl logs -f deployment/ui -n gym-jinni
-
-# Execute command in pod
-kubectl exec -it <pod-name> -n gym-jinni -- /bin/sh
-
-# Scale deployments
-kubectl scale deployment main-service --replicas=3 -n gym-jinni
+kubectl exec -n gym-jinni statefulset/postgres -- pg_dump -U root -d gj > gym-jinni-backup.sql
 ```
 
-### k3d Cluster Management
+Protect the resulting file as application data. Adjust the account/database for your environment. Restore only into an explicitly prepared target and test the procedure before teardown; automated backup retention, disaster recovery and migration recovery remain operational work in the specification. Do not infer restore guarantees from a running StatefulSet or a successful image build.
 
-```bash
-# List k3d clusters
-k3d cluster list
-
-# List k3d nodes
-k3d node list
-
-# Access k3d node shell (if needed)
-podman exec -it k3d-gym-jinni-server-0 sh
-
-# Stop cluster (preserves state)
-k3d cluster stop gym-jinni
-
-# Start cluster
-k3d cluster start gym-jinni
-
-# View k3d cluster info
-kubectl cluster-info
-```
-
-### Debugging
-
-```bash
-# Check if PostgreSQL is ready
-kubectl get statefulset postgres -n gym-jinni
-kubectl exec -it postgres-0 -n gym-jinni -- psql -U root -d gj -c '\dt'
-
-# Check service endpoints
-kubectl get endpoints -n gym-jinni
-
-# View events
-kubectl get events -n gym-jinni --sort-by='.lastTimestamp'
-
-# Check pod resource usage
-kubectl top pods -n gym-jinni
-```
-
-## CI/CD Pipelines
+## CI/CD
 
 ### GitHub Actions
 
-The `.github/workflows/deploy.yml` pipeline:
-1. Runs deployment-script regressions and builds service/UI images with Docker Buildx
-2. Pushes images to GitHub Container Registry for pushes and manual runs (pull requests build only)
-3. Deploys to Kubernetes only on an explicit manual deployment from main/master
+[Workflow](../.github/workflows/deploy.yml) behavior:
 
-**Setup:**
-1. Add `KUBECONFIG` secret to GitHub repository (base64 encoded)
-2. Use a flattened, self-contained kubeconfig with a current context, cluster CA and credentials. Its API endpoint must be reachable from the Actions runner; `localhost` in a local k3d kubeconfig will not reach your machine from a GitHub-hosted runner. Use a suitably connected/self-hosted runner for a private/local cluster.
-3. Pushes and pull requests build/test images only. To deploy, select **Actions → Build and Deploy to K8s → Run workflow**, choose `main` or `master`, and enable **Deploy to the configured Kubernetes cluster after building**. Manual runs without this input build only.
-4. Deployment validates the secret, context and API access before installing cert-manager. It waits for controller, CA injector and webhook rollouts plus a successful server-side admission dry-run before applying the ClusterIssuer. Temporary kubeconfig credentials are removed when the job finishes.
-
-A missing `KUBECONFIG` secret used to produce an empty file and let kubectl fall back to `localhost:8080`, failing in “Install cert-manager.” Missing/invalid credentials now fail in the access-validation step with a configuration-specific error. Do not commit kubeconfig credentials to the repository.
+- Pushes/PRs to `main`, `master`, `csr` build service/UI images. The service build runs canonical generation, protobuf lint and Go package tests. The service matrix job also runs deployment-script regressions. PRs do not publish images; pushes/manual runs do.
+- Actions use native Node.js 24: checkout v7, setup-buildx v4, login v4, build-push v7, setup-kubectl v5. There is no runtime-forcing environment flag. This runtime is independent of optional workstation Node.js tooling.
+- Deployment is opt-in: select **Actions → Build and Deploy to K8s → Run workflow**, choose `main` or `master`, and enable **Deploy to the configured Kubernetes cluster after building**. Other manual runs build only.
+- Add a base64-encoded `KUBECONFIG` Actions secret. It must be self-contained (CA/credentials embedded or available on the runner), have a current context, and select an API reachable from the runner. `localhost` in a developer's kubeconfig does not reach that developer's cluster from a GitHub-hosted runner. Configure an appropriate connected runner/network for private/local clusters.
+- `scripts/configure-kubectl.sh` validates base64, context, selected server and API access before installation. It writes a private temporary file without printing credentials; the workflow removes it in an always-run cleanup step.
+- Review the image, signing-secret and raw-manifest rendering requirements above. The job's existence is not evidence of a production-ready deployment.
 
 ### GitLab CI
 
-The `.gitlab-ci.yml` pipeline:
-1. Builds container images with Podman
-2. Runs integration tests
-3. Deploys to Kubernetes (manual trigger)
+[Pipeline](../.gitlab-ci.yml) builds/pushes with Podman and offers a manual main/master deployment using base64 `KUBECONFIG_CONTENT`. Its integration job builds the service image (package checks), not the isolated HTTP suite. The GitLab deploy path does not install cert-manager or apply a ClusterIssuer; provision those prerequisites separately and review its raw manifests/image references. It does not share the GitHub kubeconfig helper automatically.
 
-**Setup:**
-1. Add `KUBECONFIG_CONTENT` variable to GitLab CI/CD settings (base64 encoded)
-2. Configure GitLab Container Registry
-3. Manually trigger deployment from GitLab UI
+## cert-manager and deployment checks
 
-## Troubleshooting
+Local Ansible and GitHub share [install-cert-manager.sh](scripts/install-cert-manager.sh), pinned to the release in that file. It applies the manifest, waits for issuer CRDs and controller/CA-injector/webhook Deployment rollouts, then retries a server-side dry-run Issuer admission check. The dry run creates no issuer. Retries are bounded and failures print deployment/pod/service diagnostics before a real ClusterIssuer can be applied.
 
-### k3d cluster won't start
+From the repository root:
 
 ```bash
-# Check Podman API socket and engine
-ls -l /run/podman/podman.sock
-sudo podman ps
-
-# Check k3d version
-k3d version
-
-# Delete and recreate cluster
-k3d cluster delete gym-jinni
-./setup.sh
+python3 -m unittest discover -s k8s-setup/tests -v
+bash -n k8s-setup/scripts/configure-kubectl.sh k8s-setup/scripts/install-cert-manager.sh
 ```
 
-### Services not deploying
-
-```bash
-# Check if images are available
-sudo podman images | grep gym-jinni
-
-# Import images to k3d cluster (same DOCKER_HOST as Ansible)
-export DOCKER_HOST=unix:///run/podman/podman.sock
-sudo -E k3d image import docker.io/gym-jinni/service:latest -c gym-jinni --mode direct
-sudo -E k3d image import docker.io/gym-jinni/ui:latest -c gym-jinni --mode direct
-
-# Check pod events
-kubectl describe pod <pod-name> -n gym-jinni
-
-# Check logs
-kubectl logs <pod-name> -n gym-jinni
-```
-
-### Network/Port issues
-
-```bash
-# Check k3d cluster ports
-k3d cluster list
-
-# Check if ports are in use
-netstat -tulpn | grep -E '39080|39081|39300|6443'
-
-# Recreate cluster with different ports if needed
-k3d cluster delete gym-jinni
-# Edit roles/k3d/defaults/main.yml to change ports
-./setup.sh
-```
-
-### kubectl can't connect
-
-```bash
-# Check kubeconfig
-export KUBECONFIG=$HOME/.kube/gym-jinni-config
-kubectl cluster-info
-
-# Get fresh kubeconfig
-k3d kubeconfig get gym-jinni > $HOME/.kube/gym-jinni-config
-```
-
-### Database connection issues
-
-```bash
-# Check PostgreSQL logs
-kubectl logs postgres-0 -n gym-jinni
-
-# Test connection from service pod
-kubectl exec -it <service-pod> -n gym-jinni -- nc -zv postgres 5432
-
-# Check ConfigMap
-kubectl get configmap gym-jinni-config -n gym-jinni -o yaml
-```
-
-## Performance Tuning
-
-### Adjust resource limits
-
-Edit deployment manifests to increase/decrease resources:
-
-```yaml
-resources:
-  requests:
-    memory: "256Mi"
-    cpu: "200m"
-  limits:
-    memory: "1Gi"
-    cpu: "1000m"
-```
-
-### Scale replicas
-
-```bash
-kubectl scale deployment main-service --replicas=5 -n gym-jinni
-```
-
-### Persistent storage
-
-PostgreSQL uses persistent volumes. To increase storage:
-
-```yaml
-# In postgres-statefulset.yml
-volumeClaimTemplates:
-  - metadata:
-      name: postgres-storage
-    spec:
-      resources:
-        requests:
-          storage: 20Gi  # Increase from 5Gi
-```
-
-## Development Workflow
-
-1. Make code changes in `service/`
-2. Rebuild images: `ansible-playbook playbooks/deploy-services.yml --tags build`
-3. Redeploy: `kubectl rollout restart deployment/main-service -n gym-jinni`
-4. View logs: `kubectl logs -f deployment/main-service -n gym-jinni`
-
-## Security Notes
-
-- This setup is for **testing only**, not production
-- Database credentials are stored in plain text
-- No TLS/SSL configured
-- Services run with default security contexts
-
-For production:
-- Use proper secrets management (Vault, Sealed Secrets)
-- Enable TLS for all services
-- Configure network policies
-- Use non-root containers
-- Enable RBAC policies
-
-## License
-
-Same as gym-jinni project.
-
+Nine mock-based deployment-script regressions passed during the CI fix; they do not install cert-manager in a real cluster. With Ansible installed, check playbook syntax from this directory using `ansible-playbook --syntax-check -i inventory.yml playbooks/deploy-services.yml`. See [validation evidence](../docs/business-process-validation.md), [troubleshooting](SETUP_ISSUES.md) and [implementation summary](IMPLEMENTATION_SUMMARY.md).

@@ -15,21 +15,31 @@ Backend prerequisites include Go, Docker/PostgreSQL, Buf and its configured prot
 - `make setup`: Create the local PostgreSQL container/database and apply migrations.
 - `make service`: Generate protobuf/database code, tidy dependencies, and build `cmd/service`.
 - `make bufgen dbsql`: Regenerate API and database bindings after schema/query changes.
-- `make dbsch`: Regenerate `schema/*.sql` from DBML (needs `dbml2sql`).
+- `make dbsch`: Regenerate `schema/*.sql` from DBML plus `schema/constraints/*.sql` overlays (optional `dbml2sql`). Preserve the partial booking index and class checks.
 - `make buflint`: Validate protobuf style.
 - `make test`: Build binaries, start PostgreSQL and the service, run gRPC/HTTP smoke clients, then stop the service. Use disposable local data.
-- Set `DBURL` before running `./cmd/service` directly; `JWT_SECRET` overrides the development signing secret.
+- Set `DBURL` and a dedicated `JWT_SECRET` of at least 32 bytes before running `./cmd/service`. Only explicit `APP_ENV=development` permits the development fallback. Never use that mode in a deployed environment.
+- From the repository root, `service/scripts/validate-business.sh` runs assertion-based API/bootstrap checks and migration round trips against disposable PostgreSQL. It requires Docker access (or passwordless `sudo -n docker`), Go, curl, and image/build dependency access.
+- After registration, a database operator can provision the first administrator from `service/` using `go run ./cmd/bootstrap-admin -user-id N` with the target `DBURL`. Further grants require authenticated role administration.
 
-From `ui/`, run `flutter pub get`, `flutter run -d chrome --dart-define=API_BASE=...`, and `flutter build web`. Respect the Dart SDK constraint in `pubspec.yaml`. Local cluster setup is `k8s-setup/setup.sh`; images are built with Podman.
+From `ui/`, run `flutter pub get`, `flutter run -d chrome --dart-define=API_BASE=...`, and `flutter build web`. Respect the Dart SDK constraint in `pubspec.yaml`. Local cluster setup is `k8s-setup/setup.sh`; Docker is the default engine, with an optional Docker-compatible Podman socket. Local Ansible builds use the `docker` CLI; GitHub uses Docker Buildx and GitLab uses Podman. See [development guide](docs/development.md) and [deployment guide](k8s-setup/README.md).
 
 ## Coding Style & Naming Conventions
 
-Format Go with `gofmt` (tabs) and Dart with `dart format lib test` (two-space indentation). Use lowercase Go package names, exported `PascalCase` identifiers, and Dart `snake_case.dart` filenames. Run `flutter analyze`; lint rules come from `flutter_lints`. Edit protobuf, DBML, and SQL sources rather than generated bindings. Add numbered migration pairs such as `000012_description.up.sql` and `.down.sql`. When adding a module, add it to `SVCS` in the Makefile, the Dockerfile's sqlc loop, and register it in both functions of `service.go`.
+Format Go with `gofmt` (tabs) and Dart with `dart format lib test` (two-space indentation). Use lowercase Go package names, exported `PascalCase` identifiers, and Dart `snake_case.dart` filenames. Run `flutter analyze`; lint rules come from `flutter_lints`. Edit protobuf, DBML, and SQL sources rather than generated bindings. Add numbered migration pairs after the current `000013` migration, for example `000014_description.up.sql` and `.down.sql`. Review existing duplicates/invalid data before applying booking-integrity migration `000013`. When adding a module, add it to `SVCS` in the Makefile, the Dockerfile's sqlc loop, and register it in both functions of `service.go`.
 
 ## Testing Guidelines
 
-There are no Go unit tests yet. Use Go's standard framework with `*_test.go` files alongside implementation and run `go test ./...` in `service/` after generation. Flutter uses `flutter_test`; name tests `*_test.dart` and run `flutter test`. No coverage threshold is configured. Extend `cmd/grpcclt.go` and `cmd/httpclt.sh` for API changes and test authorization denials as well as successful requests.
+Go unit tests cover authentication, class validation, and middleware; bootstrap/API tests require an isolated database and otherwise skip. Use Go's standard framework with `*_test.go` files alongside implementation and run `go test ./...` in `service/` after both protobuf and sqlc generation. The service Dockerfile runs canonical generation, protobuf lint and package checks, avoiding stale ignored host bindings. Flutter uses `flutter_test`; name tests `*_test.dart` and run `flutter test`. No coverage threshold is configured. Extend `cmd/grpcclt.go` and `cmd/httpclt.sh` for API changes and test authorization denials as well as successful requests.
 
 ## Commit & Pull Request Guidelines
 
 History uses short, descriptive subjects such as `adjust setup-alx.sh`; no strict prefix convention is established. Keep commits focused. PRs should explain behavior changes, link relevant issues, list validation commands/results, and include screenshots for UI changes. Document migration, configuration, and API impacts.
+
+## Deployment and Documentation
+
+GitHub Actions builds on pushes/PRs to `main`, `master`, and `csr`; only non-PR runs publish images. Deployment requires a manual workflow run on `main`/`master` with the `deploy` input enabled and a base64 `KUBECONFIG` secret for a reachable cluster. Native Node.js 24 actions are used; no runtime-forcing flag is needed. GitLab deployment is also manual. Deployment guard tests: `python3 -m unittest discover -s k8s-setup/tests -v` from the root.
+
+The Flutter UI has Register/Login and Home, Classes, Bookings, Activity, Profile tabs. Super administrators currently manage roles/permissions and other operational features through the API; no admin screens exist. Keep [spec.md](spec.md) and [validation report](docs/business-process-validation.md) aligned with implemented versus planned behavior; preserve dated historical results as historical evidence.
+
+Node.js is optional host tooling, not a backend/Flutter runtime dependency. The observed workstation installation is Node.js 26.13.0 LTS under `/opt/node-v26.13.0-linux-x64`, with npm/npx 11.20.0 and Corepack 0.36.0; `/usr/local/bin` links select it and the former installation is retained for rollback. Recheck release metadata when upgrading. See [development guide](docs/development.md#optional-nodejs-tooling).

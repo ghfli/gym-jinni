@@ -7,6 +7,7 @@ Single Go module and binary: **gRPC :8080**, **HTTP gateway :8081**.
 | Users | `user/`, `gen/go/user/v1alpha` |
 | Classes and bookings | `class/`, `booking/` — registered on both transports |
 | RBAC | `rbac/`, `middleware/`, [RBAC.md](RBAC.md) |
+| Operations | `gym/`, `schedule/`, `payment/`, `notification/`, `activity/`, `report/` |
 
 ## Build (local)
 
@@ -18,7 +19,7 @@ make dbsql
 go build -o cmd/service .
 ```
 
-Schema for sqlc is committed under `schema/*.sql`. Optional: `make dbsch` refreshes from DBML if `dbml2sql` is installed.
+Schema for sqlc is committed under `schema/*.sql`. Optional `make dbsch` refreshes it from DBML and `schema/constraints/*.sql` overlays if `dbml2sql` is installed; keep those overlays in sync with migrations. `report` uses direct queries and is excluded from the sqlc module loop.
 
 ## Migrations
 
@@ -45,3 +46,12 @@ service/scripts/validate-business.sh
 ```
 
 This builds canonical bindings in an isolated image, runs package checks, verifies administrator bootstrap and HTTP workflows, and tests the new migration down/up pairs. Docker access (or passwordless sudo), Go, curl and build dependencies/image access are required. It does not use the deployed database. See the [HTTP inventory and validation report](../docs/business-process-validation.md) for all access points, workflow cases and results.
+
+
+## Tests, authorization and feature status
+
+After both protobuf and sqlc generation, `go test ./...` runs token/configuration, class-boundary, middleware and policy-completeness tests. Bootstrap/API tests skip without an explicitly isolated environment; use the runner above for their actual execution. The legacy `make test` starts the local service in development mode and drives smoke clients; its privileged steps need provisioned actors and it is not the acceptance suite.
+
+Every declared RPC has an explicit public/authenticated/permission policy. Private resources also require owner/admin scope. Customer registration provisions its role in the account transaction; bootstrap needs direct database-operator access. The current UI has no administrator management pages. See [RBAC notes](RBAC.md) and [HTTP/workflow inventory](../docs/business-process-validation.md).
+
+Payments currently store ledger records without provider settlement; notifications store inbox/preferences without external delivery. Multi-gym staff scope, waitlists, recurrence/room conflicts, reporting definitions and management screens remain in [spec.md](../spec.md). A handler's existence is not evidence of a completed workflow. Operational prerequisites and optional workstation Node.js tooling are documented in the [development guide](../docs/development.md).

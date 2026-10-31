@@ -1,5 +1,7 @@
 # HTTP and business-process validation
 
+Documentation reviewed 2026-10-31; [development](development.md), [deployment](../k8s-setup/README.md), [UI](../ui/README.md) and [administrator setup](../service/RBAC.md) contain current commands. This revision updates documentation only; the dated runtime results below retain their original scope.
+
 Audit date: 2026-10-29. **The original failures below are historical; see Remediation results for the current implementation.** Contracts and source establish declared capabilities; only executed checks establish runtime behavior. Test failures are requirement failures and remain enabled. The initial audit added tests/tasks; subsequent remediation implements the confirmed defects and records the remaining feature work.
 
 ## Access points and web screens
@@ -206,3 +208,11 @@ Final verification after remediation:
 | Patch whitespace and runner syntax | Passed |
 
 Final API run: 11.272 seconds after build/migration; local artifacts `/tmp/gj-validation.UsHQTm`. Validation containers, network and temporary image were removed. UI implementation was committed as `27b04f7`, security as `e6d0f9e`, booking integrity as `9a8b23c`, and canonical verification tooling as `b23625c`. Remaining design-dependent features are explicitly pending in the specification.
+
+
+## Later CI/tooling verification (2026-10-31)
+
+- Deployment kubeconfig validation and cert-manager CRD/rollout/admission readiness have nine mock-based regressions. They passed with workflow lint, shell syntax and Ansible syntax checks during the deployment fix. GitHub deploy now requires explicit manual opt-in and a configured runner-reachable kubeconfig; no live installation was performed without credentials.
+- The workflow's five action types were checked against their released metadata: each declares node24 and accepts the configured inputs. Workflow lint passed after the upgrade; the runtime-forcing override is removed. This is a workflow metadata/lint result, not a claim that a new remote matrix run completed.
+- The optional host Node.js installation was upgraded to 26.13.0 LTS with npm/npx 11.20.0 and Corepack 0.36.0. Archives were verified and all four commands smoke-tested before/after system link changes; the old installation remains for rollback. This does not change the actions' independent runtime.
+- This documentation audit verifies links, documented contracts/paths and shell snippet syntax without rerunning destructive cluster setup or claiming new application test results. Current deployment templates still need signing-secret wiring, registry/image-policy alignment, raw-domain rendering and migration error handling (OPS-05).
