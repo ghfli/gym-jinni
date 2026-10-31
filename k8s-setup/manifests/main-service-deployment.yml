@@ -38,8 +38,40 @@ spec:
     spec:
       initContainers:
       - name: wait-for-postgres
-        image: busybox:1.35
-        command: ['sh', '-c', 'until nc -z postgres 5432; do echo waiting for postgres; sleep 2; done;']
+        image: postgres:15-alpine
+        command: ["/bin/sh", "-ec"]
+        args:
+          - |
+            attempt=0
+            until pg_isready --timeout=2; do
+              attempt=$((attempt + 1))
+              if [ "$attempt" -ge 60 ]; then
+                echo "PostgreSQL did not become ready after 60 checks" >&2
+                exit 1
+              fi
+              sleep 2
+            done
+        env:
+        - name: PGHOST
+          valueFrom:
+            configMapKeyRef:
+              name: gym-jinni-config
+              key: POSTGRES_HOST
+        - name: PGPORT
+          valueFrom:
+            configMapKeyRef:
+              name: gym-jinni-config
+              key: POSTGRES_PORT
+        - name: PGDATABASE
+          valueFrom:
+            configMapKeyRef:
+              name: gym-jinni-config
+              key: POSTGRES_DB
+        - name: PGUSER
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: POSTGRES_USER
       - name: run-migrations
         image: gym-jinni/service:latest
         imagePullPolicy: Never
