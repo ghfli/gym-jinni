@@ -271,3 +271,7 @@ Signing-key bytes are compared without stripping newlines; namespace drift fails
 Ansible helper diagnostics are visible without rendering the operator key in task arguments. GitLab now runs the same pinned-dependency deployment suite as GitHub and checks the deployment image's shell/utility prerequisites. Tests load YAML by resource/container name, including reordered formatting and extra-container fixtures. Essential generated-code, host-port and Buf dependency rules are recorded in AGENTS.md and explicitly referenced by CLAUDE.md.
 
 The [focused deployment improvement plan](docs/deployment-improvement-plan.md) defines separate follow-up changes for registry/domain rendering, release migration coordination, scoped deployment credentials and disposable rollout acceptance. None is silently bundled into this lifecycle correction.
+
+## 20. Accepted multi-gym internal MVP
+
+The [delivery ledger](docs/mvp-delivery.md) records the accepted product defaults, ordered dependencies and acceptance evidence for the remaining requirements. Multi-gym scoped internal workflows are the implementation boundary; provider adapters do not imply live charges or external delivery. Requirement status changes only with recorded verification.
