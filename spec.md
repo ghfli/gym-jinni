@@ -260,3 +260,14 @@ The backend manifest now requires `gym-jinni-auth/JWT_SECRET`; shared deployment
 The migration init command uses `exec migrate ... up` with error propagation. PostgreSQL connectivity/schema/data failures block application startup; no-change succeeds. Regression tests exercise the exact manifest command's exit status and signing-key lifecycle. OPS-05 retains the distinct registry/rendering/recovery work still outstanding.
 
 Contributor instructions are centralized in AGENTS.md; CLAUDE.md links them. Validation script examples consistently run from the repository root. Active guides use test-command output instead of fixed counts, and shared tooling guidance is machine-independent. Shorter Kubernetes guides were reviewed individually and expanded with source/execution maps and concrete startup/secret/migration diagnosis.
+
+
+## 19. Deployment lifecycle review and next plan
+
+The existing TCP wait was strengthened to bounded `pg_isready` availability using PostgreSQL configuration fields. Migration failures still block startup. A committed, structurally parsed Docker harness reproduces cold start, fresh/no-change/upgrade, migration-13 constraint failures and verified rollback-state recovery; the operator runbook defines when marker repair is permissible.
+
+Signing-key bytes are compared without stripping newlines; namespace drift fails before cluster access. Normal redeployment preserves the key and rejects unexpected changes. An explicit operator command applies a resource-version-checked update without deleting the Secret, restarts/waits for backend rollout and supports retries after an interrupted rollout. Single-key rotation invalidates prior tokens; zero-disruption multi-key rollover remains separate work.
+
+Ansible helper diagnostics are visible without rendering the operator key in task arguments. GitLab now runs the same pinned-dependency deployment suite as GitHub and checks the deployment image's shell/utility prerequisites. Tests load YAML by resource/container name, including reordered formatting and extra-container fixtures. Essential generated-code, host-port and Buf dependency rules are recorded in AGENTS.md and explicitly referenced by CLAUDE.md.
+
+The [focused deployment improvement plan](docs/deployment-improvement-plan.md) defines separate follow-up changes for registry/domain rendering, release migration coordination, scoped deployment credentials and disposable rollout acceptance. None is silently bundled into this lifecycle correction.

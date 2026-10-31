@@ -66,3 +66,5 @@ bash k8s-setup/scripts/ensure-jwt-secret.sh
 ```
 
 The helper validates and reuses an existing signing key and creates one only when absent. For an init failure, select the failing pod and inspect `kubectl logs -n gym-jinni POD_NAME -c run-migrations` (replace `POD_NAME` with its name). The application does not start until `migrate up` succeeds or reports no change. See the [failure runbooks](SETUP_ISSUES.md) before repairing data or schema versions.
+
+For cold-start/migration errors use the [database recovery guide](MIGRATION_RECOVERY.md). To adopt a new operator/CI signing key, use the [explicit rotation command](README.md#signing-key-lifecycle), not Secret deletion; ordinary deploys preserve existing keys.

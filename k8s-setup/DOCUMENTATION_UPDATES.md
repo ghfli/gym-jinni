@@ -11,6 +11,7 @@ Refreshed 2026-10-31 from repository source. This file indexes current guides ra
 | [UI](../ui/README.md) | Real screens, API_BASE, sessions and widget tests |
 | [Deployment](README.md) / [quick start](QUICKSTART.md) | Source-grounded cluster/CI instructions and required customization |
 | [Implementation](IMPLEMENTATION_SUMMARY.md) / [migration notes](K3D_IMPLEMENTATION.md) | Current tooling structure and historical rationale |
+| [Database recovery](MIGRATION_RECOVERY.md) | Readiness, dirty migration decisions and reproducible isolated checks |
 | [Troubleshooting](SETUP_ISSUES.md) | Concrete configuration, image, JWT, migration and TLS failures |
 | [Specification](../spec.md) / [validation evidence](../docs/business-process-validation.md) | Requirement status, API inventory and dated results |
 | [Historical VM notes](../memo.md) | Unimplemented proposals kept as historical reference |
@@ -31,3 +32,5 @@ Check repository-relative Markdown links and heading anchors, documented paths/c
 The deployment review is addressed in executable configuration: the backend has a required Secret reference, all deployment paths provision/reuse that key, and migration errors propagate out of the init container. The guides above were individually reviewed for working navigation and operational content. They retain distinct purposes: quick-start sequence, architecture/execution map, cluster-engine rationale, diagnostic/recovery runbooks, and this maintenance index. Current procedures were expanded where concrete commands were missing; obsolete unverified claims were not restored to increase line count.
 
 Shared guides no longer contain a workstation's installation directories, resolved package versions or its TLS incident. Validation commands use `service/scripts/validate-business.sh` from the repository root. Active deployment guidance points to test output rather than a hardcoded test count.
+
+A later review verified that a TCP wait already existed, strengthened it to PostgreSQL readiness, added explicit rotation/recovery tooling, fixed byte/namespace/logging issues, and added GitLab/structural-YAML checks. Agent essentials remain in AGENTS.md rather than duplicated tool guides. The [follow-up plan](../docs/deployment-improvement-plan.md) keeps further improvements separate from this correction.

@@ -219,11 +219,16 @@ Final API run: 11.272 seconds after build/migration; local artifacts `/tmp/gj-va
 
 ## Deployment review regression coverage
 
-The deployment suite now tests key generation/reuse, explicit-key preservation/conflicts, invalid Secret data, access failures and concurrent creation. It also executes the actual init command extracted from the manifest with success/failure fixtures, checks the mandatory Secret reference, and ensures migration failures are not converted into success. Use the test command for the current test count.
+The committed regression suite uses PyYAML resource/container selection rather than indentation/regex parsing. Both GitHub and GitLab install the pinned requirements and run it. Tests exercise credential/readiness behavior, key-byte preservation (including trailing newlines), namespace rejection, explicit compare-and-swap rotation, failed-rollout retries, key-file protection, startup gating and YAML reordering. Use test output for the current count.
 
-See [deployment operations](../k8s-setup/README.md) for the shared provisioning helper and migration diagnosis, and [specification follow-up](../spec.md#18-deployment-review-follow-up) for delivered versus remaining work. Real PostgreSQL migration evidence is recorded after isolated verification rather than inferred from mocks.
+The original one-off real-database checks are now recorded in [verify_migrations.py](../k8s-setup/tests/verify_migrations.py). With a service image containing the migration CLI and the pinned test requirements installed, run from the repository root:
 
+```bash
+python3 k8s-setup/tests/verify_migrations.py --service-image gym-jinni/service:latest
+```
 
-Isolated review verification used the exact init command and arguments read from the Deployment, the existing migration CLI image and a disposable PostgreSQL instance/network with the current migration directory mounted read-only. Fresh installation, already-current/no-change and a valid upgrade from migration 12 returned success. Migration 13 against duplicate confirmed bookings and invalid class ranges returned nonzero with the expected constraint errors. The test database/container/network were removed afterward. This proves migration exit behavior without claiming a live Kubernetes rollout.
+The harness reads the actual manifest commands, starts the wait step before a disposable PostgreSQL server exists, and executes fresh/no-change/upgrade cases. Migration 13 against synthetic duplicate bookings and invalid ranges fails; the harness confirms dirty migration 13 with its DDL rolled back, repairs only fixture data, resets the verified marker to 12 and successfully reapplies 13. The current run passed all these cases and removed its uniquely named containers/network. This is isolated database evidence, not a live Kubernetes rollout.
 
-Deployment regressions cover the persistent Secret and startup contracts, including private temporary key files and failure propagation. Workflow lint, shell syntax and Ansible syntax checks pass. The current test count is reported by `python3 -m unittest discover -s k8s-setup/tests -v`, rather than embedded in active runbooks.
+The [recovery runbook](../k8s-setup/MIGRATION_RECOVERY.md) documents the preconditions for an operator retry; it does not authorize blind version forcing or automatic customer-record repair. The [rotation workflow](../k8s-setup/README.md#signing-key-lifecycle) documents explicit key adoption and the login/maintenance implications of a single signing key. Ordinary deployment still refuses an unexpected key change.
+
+Final review checks passed with the pinned YAML release: deployment regressions, the committed real-database harness, workflow lint, Ansible syntax, and documentation links/examples. Ansible controller-environment inheritance and safe error visibility were checked with local fixtures; no signing values were printed and no live deployment was performed. GitLab image prerequisites are checked by the job; a remote GitLab pipeline execution is not claimed.

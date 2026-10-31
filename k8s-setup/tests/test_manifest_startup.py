@@ -248,7 +248,7 @@ class StartupContractTest(unittest.TestCase):
 
     def test_container_selection_survives_reordering_and_reformatting(self):
         resources = list(yaml.safe_load_all(MANIFEST.read_text()))
-        deployment = next(item for item in resources if item["kind"] == "Deployment")
+        deployment = next(item for item in resources if item["kind"] == "Deployment" and item["metadata"]["name"] == "main-service")
         spec = deployment["spec"]["template"]["spec"]
         spec["containers"].insert(0, {"name": "sidecar", "image": "fixture"})
         spec["initContainers"].reverse()

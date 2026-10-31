@@ -8,7 +8,7 @@ The recorded cert-manager job failed before installation because its missing KUB
 
 ## Backend refuses to start
 
-Inspect `kubectl logs deployment/main-service -n gym-jinni`. Startup requires a dedicated JWT_SECRET of at least 32 bytes; the base manifest reads the required gym-jinni-auth/JWT_SECRET Secret. Ansible/CI provision it automatically; direct manifest users must run the shared helper first. `APP_ENV=development` is an explicit local-only fallback, not a deployed fix. Old JWTs without session/purpose claims require login again.
+Inspect the failing pod and its app/init logs as appropriate. Startup requires a dedicated JWT_SECRET of at least 32 bytes; the base manifest reads the required gym-jinni-auth/JWT_SECRET Secret. Ansible/CI provision it automatically; direct manifest users must run the shared helper first. `APP_ENV=development` is an explicit local-only fallback, not a deployed fix. Old JWTs without session/purpose claims require login again.
 
 ## Migration or data-integrity failure
 
@@ -51,7 +51,7 @@ bash k8s-setup/scripts/ensure-jwt-secret.sh
 kubectl get secret gym-jinni-auth -n gym-jinni
 ```
 
-The last command shows metadata, not key values. The helper reuses a valid existing key; a short/default key, missing JWT_SECRET data, denied access or conflicting explicit environment value returns an error. Do not delete a working Secret to make a conflict disappear: that is a signing-key rotation. Check the intended environment/secret-manager value and use the [rotation procedure](README.md#signing-key-lifecycle) deliberately.
+The last command shows metadata, not key values. The helper reuses a valid existing key; a short/default key, missing JWT_SECRET data, denied access or conflicting explicit environment value returns an error. Do not delete a working Secret to make a conflict disappear: that is a signing-key rotation. Check the intended environment/secret-manager value and use the [implemented rotation command](README.md#signing-key-lifecycle) deliberately. It does not delete the Secret, uses a resource-version check, and can resume an incomplete rollout with the same key file.
 
 ## Migration 000013 blocks a rollout
 
@@ -66,4 +66,9 @@ Read the named database constraint/error first. Back up the target database; rev
 
 ## Verify the documented configuration without a live deployment
 
-From the repository root, run `python3 -m unittest discover -s k8s-setup/tests -v`, and from `k8s-setup/` run `ansible-playbook --syntax-check -i inventory.yml playbooks/deploy-services.yml`. The test output is the authoritative current count. These checks do not replace rollout inspection or a backup/restore test against the actual deployment.
+From the repository root, first install `k8s-setup/tests/requirements.txt` in your Python test environment, then run `python3 -m unittest discover -s k8s-setup/tests -v`, and from `k8s-setup/` run `ansible-playbook --syntax-check -i inventory.yml playbooks/deploy-services.yml`. The test output is the authoritative current count. These checks do not replace rollout inspection or a backup/restore test against the actual deployment.
+
+
+The earlier TCP wait was present; it has been strengthened to a bounded PostgreSQL availability check. For readiness configuration, dirty migration inspection, verified migration-13 recovery preconditions and a reproducible Docker harness, use [MIGRATION_RECOVERY.md](MIGRATION_RECOVERY.md). Recovery changes migration state only after data/schema preconditions are checked; it never runs automatically during deployment.
+
+Ansible now exposes helper failures while inheriting optional operator key material from the controller environment rather than rendering it into the task's environment arguments. An API access error, conflicting key or invalid Secret should be diagnosed from the helper message; do not disable validation. Both provisioning and rotation reject `KUBE_NAMESPACE` values that disagree with the checked-in namespace.

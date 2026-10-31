@@ -5,8 +5,7 @@ import subprocess
 import tempfile
 import unittest
 
-import yaml
-from manifest_utils import MANIFEST, named_container
+from manifest_utils import backend_pod_spec, named_container
 
 
 class DatabaseReadinessTest(unittest.TestCase):
@@ -17,9 +16,7 @@ class DatabaseReadinessTest(unittest.TestCase):
         self.env = dict(os.environ, PATH=f"{self.root}:{os.environ['PATH']}")
 
     def test_database_wait_retries_until_ready_and_has_a_bound(self):
-        spec = yaml.safe_load_all(MANIFEST.read_text())
-        deployment = next(item for item in spec if item["kind"] == "Deployment")
-        names = [item["name"] for item in deployment["spec"]["template"]["spec"]["initContainers"]]
+        names = [item["name"] for item in backend_pod_spec()["initContainers"]]
         self.assertLess(names.index("wait-for-postgres"), names.index("run-migrations"))
         wait = named_container("wait-for-postgres", init=True)
         executable = self.root / "pg_isready"

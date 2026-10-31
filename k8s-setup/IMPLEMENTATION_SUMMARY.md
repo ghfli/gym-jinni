@@ -39,9 +39,11 @@ Historical MicroK8s/K3s-in-Podman experiments and migration reasons are in [setu
 | --- | --- | --- |
 | Namespace/database configuration | `roles/gym-jinni/tasks/main.yml`, CI manifest steps | Apply errors stop deployment |
 | Persistent signing key | `scripts/ensure-jwt-secret.sh` | Invalid/mismatched keys or access errors stop; ordinary redeploys preserve the key |
-| Database readiness | `wait-for-postgres` init container | Backend remains blocked while PostgreSQL is unavailable |
+| Database readiness | `wait-for-postgres` init container with `pg_isready` | Bounded retries wait for server availability before migrations |
 | Schema migration | `run-migrations` in `manifests/main-service-deployment.yml` | Nonzero migration exit blocks application startup; no-change succeeds |
 | Backend environment | Required `gym-jinni-auth/JWT_SECRET` reference | Missing Secret/key prevents container creation |
 | TLS readiness | `scripts/install-cert-manager.sh` | Rollout/admission failures stop before a real issuer is applied |
 
 The deployment test command reports its current count. Regression checks cover secret preservation, explicit-key conflicts, creation races, denied access and execution of the actual init command. Dated validation evidence distinguishes mocked behavior from isolated real PostgreSQL migration checks. Use [diagnostic commands](README.md#diagnose-blocked-startup) for blocked pods rather than bypassing init failure.
+
+The [committed migration harness and conditional recovery runbook](MIGRATION_RECOVERY.md) replace one-off verification claims. Manifest tests use structural YAML selection by resource/container name. Both CI providers run the pinned-dependency regression suite; the signing key has a separate, byte-exact operator rotation path with rollout completion checks.

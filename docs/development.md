@@ -36,10 +36,11 @@ Before launching `service/cmd/service`, set `DBURL` and a private `JWT_SECRET` o
 service/scripts/validate-business.sh
 (cd ui && flutter test --no-pub)
 (cd ui && flutter analyze --no-pub)
+python3 -m pip install -r k8s-setup/tests/requirements.txt
 python3 -m unittest discover -s k8s-setup/tests -v
 ```
 
-Run `flutter pub get` first if dependencies are absent. The business runner requires Docker access or passwordless `sudo -n docker`, Go and curl, plus network/cache access for build dependencies/images. It creates uniquely named containers, a private network and random loopback ports; applies migrations; tests bootstrap and HTTP workflows; round-trips migrations `000012`/`000013`; and removes only its own resources. Logs are retained in the printed temporary directory. Never point its validation variables at a shared database.
+Run `flutter pub get` first if dependencies are absent. Install deployment-test requirements in an active Python virtual/test environment with pip; GitHub creates an isolated environment and GitLab uses its Python test image. The business runner requires Docker access or passwordless `sudo -n docker`, Go and curl, plus network/cache access for build dependencies/images. It creates uniquely named containers, a private network and random loopback ports; applies migrations; tests bootstrap and HTTP workflows; round-trips migrations `000012`/`000013`; and removes only its own resources. Logs are retained in the printed temporary directory. Never point its validation variables at a shared database.
 
 `make test` is a legacy smoke harness that creates local data and runs clients with privileged-operation assumptions. Its compilation is checked, but a fresh customer cannot perform all administrative steps. Prefer the assertion-based isolated runner. Historical and current evidence is in the [validation report](business-process-validation.md); this documentation revision does not claim a new live deployment or full runtime test run.
 
@@ -75,3 +76,5 @@ GitHub actions run on their own native Node.js 24 runtimes, independent of the w
 GitHub Actions uses checkout v7, build-push v7, login v4, setup-buildx v4 and setup-kubectl v5, all verified as native Node.js 24 actions during migration. The runtime-forcing environment flag has been removed. Pushes/PRs on `main`, `master`, `csr` build images; non-PR runs publish. Deployment is opt-in through a manual run on `main`/`master` with `deploy` enabled and a valid base64 `KUBECONFIG` secret for a runner-reachable cluster. GitLab uses Podman and its own manual deploy job.
 
 See [deployment guide](../k8s-setup/README.md) for prerequisites, local image versus GHCR differences, secret wiring, manifest rendering and cert-manager readiness.
+
+For repeatable real PostgreSQL startup/upgrade/failure/recovery checks, see the [migration harness](../k8s-setup/MIGRATION_RECOVERY.md#reproduce-the-checks-safely). This harness is separate from the fake-command unit checks.
