@@ -28,7 +28,7 @@ export DBURL="postgresql://..."
 make migup
 ```
 
-Includes all domain schemas and RBAC seeds through migration `000013`. Before upgrading, review duplicate confirmed bookings and invalid class times/capacities; `000013` refuses invalid existing records. [RBAC.md](RBAC.md) describes first-administrator provisioning and permission grants.
+Includes all domain schemas and RBAC seeds through migration `000014`. Before upgrading, review duplicate confirmed bookings and invalid class times/capacities; `000013` refuses invalid existing records. [RBAC.md](RBAC.md) describes first-administrator provisioning and permission grants.
 
 ## Docker
 
@@ -55,3 +55,5 @@ After both protobuf and sqlc generation, `go test ./...` runs token/configuratio
 Every declared RPC has an explicit public/authenticated/permission policy. Private resources also require owner/admin scope. Customer registration provisions its role in the account transaction; bootstrap needs direct database-operator access. The current UI has no administrator management pages. See [RBAC notes](RBAC.md) and [HTTP/workflow inventory](../docs/business-process-validation.md).
 
 Payments currently store ledger records without provider settlement; notifications store inbox/preferences without external delivery. Multi-gym staff scope, waitlists, recurrence/room conflicts, reporting definitions and management screens remain in [spec.md](../spec.md). A handler's existence is not evidence of a completed workflow. Operational prerequisites and optional host Node.js tooling are documented in the [development guide](../docs/development.md).
+
+Migration `000014` retires plaintext refresh credentials and blocks existing sessions; users must sign in again. Renewal clients must replace both returned tokens. Browser administration is documented in [system administration](../docs/system-administration.md).

@@ -1,6 +1,6 @@
 # HTTP and business-process validation
 
-Documentation reviewed 2026-10-31; [development](development.md), [deployment](../k8s-setup/README.md), [UI](../ui/README.md) and [administrator setup](../service/RBAC.md) contain current commands. This revision updates documentation only; the dated runtime results below retain their original scope.
+Documentation reviewed 2026-10-31; [development](development.md), [deployment](../k8s-setup/README.md), [UI](../ui/README.md) and [administrator setup](../service/RBAC.md) contain current commands. The dated runtime results retain their original scope; later implementation results are recorded in the incremental sections below.
 
 Audit date: 2026-10-29. **The original failures below are historical; see Remediation results for the current implementation.** Contracts and source establish declared capabilities; only executed checks establish runtime behavior. Test failures are requirement failures and remain enabled. The initial audit added tests/tasks; subsequent remediation implements the confirmed defects and records the remaining feature work.
 
@@ -27,15 +27,17 @@ The deployed UI uses one URL and internal navigation, with no named/deep-link ro
 | My Bookings | Bookings tab / My Bookings | List own bookings and cancel confirmed bookings |
 | Activity | Activity tab | Log workout/run/class activity; list and show totals |
 | Profile | Profile tab | Show in-memory name/ID; server logout with owned session ID |
+| System administration | Management destination for active super administrators | Paged users, roles, permissions, role assignments/expiry; no separate URL |
 
 The nginx image also maps `/api/` and `/rbac/` to the gateway root; e.g. `/api/v1/classes` rewrites to `/v1/classes`. These are configured aliases, not additional business APIs, and were not probed. Ingress depends on a configured domain/TLS and its rewrite behavior is unverified. `API_BASE` defaults to `http://127.0.0.1:39081` in source; the UI image explicitly builds with an empty value for same-origin requests.
 
 ## Complete HTTP contract inventory
 
-70 operations across 10 services, derived from protobuf annotations. Access entries reflect the remedied policies; handler ownership checks supplement operation permissions. Global reports now require system-admin scope. `JWT` means authentication without a mapped permission. `JWT (unmapped)` exposes a policy gap. Public entries describe current policy, not approval of that policy. Permission checks do not establish ownership enforcement. Body/query shapes remain defined by protobuf.
+71 operations across 10 services, derived from protobuf annotations. Access entries reflect the remedied policies; handler ownership checks supplement operation permissions. Global reports now require system-admin scope. `JWT` means authentication without a mapped permission. `JWT (unmapped)` exposes a policy gap. Public entries describe current policy, not approval of that policy. Permission checks do not establish ownership enforcement. Body/query shapes remain defined by protobuf.
 
 | Domain | HTTP operation | RPC | Current access | Screen |
 | --- | --- | --- | --- | --- |
+| [user](../service/user/pb/user/v1alpha/user.proto) | `GET /v1/users` | `ListUsers` | JWT + system administrator scope | Management / Users |
 | [activity](../service/activity/pb/activity/v1alpha/activity.proto) | `POST /v1/activities` | `LogActivity` | JWT | Activity |
 | [activity](../service/activity/pb/activity/v1alpha/activity.proto) | `GET /v1/activities/{id}` | `GetActivity` | JWT | API only |
 | [activity](../service/activity/pb/activity/v1alpha/activity.proto) | `GET /v1/users/{user_id}/activities` | `ListActivities` | JWT | Activity |
@@ -240,3 +242,10 @@ Migration 000014 retires plaintext persisted refresh credentials and requires ex
 `service/scripts/validate-business.sh` passed canonical generation/lint/package tests, administrator bootstrap and real PostgreSQL HTTP integration, including sequential rotation/replay, simultaneous replay and password-change revocation. Password changes revoke all sessions atomically and update the password-change timestamp. Login, renewal and password changes serialize account/session mutations. Flutter analysis and the full widget suite passed with replacement-token handling; delayed unauthorized responses reuse the latest access credential instead of unnecessarily renewing again. These are disposable-stack results, not live deployment claims.
 
 The committed `verify_migrations.py` harness also exercises migration 000014 against an existing plaintext session, downgrades it, and reapplies. It verifies that both directions block the old session and never restore usable plaintext credentials. The real PostgreSQL cold-start/fresh/no-change, migration-12 upgrade, migration-13 rejection/recovery, and migration-14 credential-retirement scenarios passed.
+
+
+## Internal MVP increments
+
+The deployment suite and committed disposable k3d harness verify rendering, migration gating, reapply, namespace-scoped permissions and explicit signing-key rotation. The new administration integration cases verify directory pagination, backend system-admin scope, reserved roles, invalid expiry and concurrent revocation preserving a permanent administrator. Flutter tests cover administrator-only navigation, grant expiry, pagination and visible denial. Report fixtures reconcile pending/refunded exclusion, per-currency totals, no-shows and exclusive date boundaries; activity fixtures assert rejected writes have no side effects.
+
+Reproduce backend checks with `service/scripts/validate-business.sh`, UI checks with `flutter analyze` and `flutter test` from `ui/`, deployment guards with `python3 -m unittest discover -s k8s-setup/tests -v`, and real deployment/migration acceptance with the committed `verify_rollout.py` / `verify_migrations.py` harnesses. These results do not establish tenant isolation, payment settlement, staff attendance transitions or notification delivery: those features remain explicitly open in the delivery ledger.

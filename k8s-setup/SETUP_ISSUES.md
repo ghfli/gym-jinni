@@ -24,7 +24,7 @@ The shared installer waits for issuer CRDs, all three deployments and a server-s
 
 ## Ingress or browser/API connectivity
 
-Ansible renders domain/issuer templates using group variables; raw manifests contain placeholders that kubectl will not expand. Check DNS, ingress class, ACME email and reachability of host ports 80/443. Access local UI/API through ports 39300/39081; protected endpoints normally return 401 without a token. In a remote browser, localhost means the browser's machine. Use a reachable API_BASE or the nginx same-origin proxy. No current admin management page is hidden behind a special URL; management APIs are documented in [RBAC notes](../service/RBAC.md).
+The shared release renderer resolves the domain; explicit bootstrap configures the issuer; raw manifests contain placeholders that kubectl will not expand. Check DNS, ingress class, ACME email and reachability of host ports 80/443. Access local UI/API through ports 39300/39081; protected endpoints normally return 401 without a token. In a remote browser, localhost means the browser's machine. Use a reachable API_BASE or the nginx same-origin proxy. Active system administrators have a Management navigation destination; see [system administration](../docs/system-administration.md).
 
 ## Container engine, WSL and kubeconfig ownership
 
@@ -72,3 +72,5 @@ From the repository root, first install `k8s-setup/tests/requirements.txt` in yo
 The earlier TCP wait was present; it has been strengthened to a bounded PostgreSQL availability check. For readiness configuration, dirty migration inspection, verified migration-13 recovery preconditions and a reproducible Docker harness, use [MIGRATION_RECOVERY.md](MIGRATION_RECOVERY.md). Recovery changes migration state only after data/schema preconditions are checked; it never runs automatically during deployment.
 
 Ansible now exposes helper failures while inheriting optional operator key material from the controller environment rather than rendering it into the task's environment arguments. An API access error, conflicting key or invalid Secret should be diagnosed from the helper message; do not disable validation. Both provisioning and rotation reject `KUBE_NAMESPACE` values that disagree with the checked-in namespace.
+
+Rendered releases use a migration Job rather than a per-replica migration init. Inspect `kubectl get jobs -n gym-jinni` and the failed Job logs before following [migration recovery](MIGRATION_RECOVERY.md). The checked-in base Deployment still has its compatibility init migration.

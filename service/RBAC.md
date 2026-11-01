@@ -8,7 +8,7 @@ RBAC lives in this repo under **`service/rbac/`** and **`service/middleware/`**.
 ## Database
 
 - Schema: `rbac` (tables: `role`, `permission`, `role_permission`, `user_role`)
-- RBAC migrations: `service/mig/000003_init_schema_rbac.*`, `000004_seed_default_roles_permissions.*`, `000012_complete_permissions.*`; all domains share the ordered migration stream through `000013`.
+- RBAC migrations: `service/mig/000003_init_schema_rbac.*`, `000004_seed_default_roles_permissions.*`, `000012_complete_permissions.*`; all domains share the ordered migration stream through `000014`.
 - SQLC schema source: `service/schema/rbac.sql`
 
 ## Middleware
@@ -61,3 +61,5 @@ The existing web app is normally at `http://localhost:39300`, the direct API at 
 | Introspection | `GET /v1/users/{user_id}/roles`, `/role-details`, `/permissions` |
 
 Look up the desired role with `GET /v1/roles/by-name/super_admin`; do not assume seeded numeric IDs. The grantor is derived from the verified caller, and active roles combine additively with expiry filtering. `manage_*` names are exact permissions rather than wildcards. Remaining staff/tenant delegation and audit history are tracked in the specification. The [full inventory](../docs/business-process-validation.md) includes all management modules and required permissions.
+
+Migration `000014` retires plaintext refresh credentials and blocks existing sessions; users must sign in again. Renewal clients must replace both returned tokens. Browser administration is documented in [system administration](../docs/system-administration.md).

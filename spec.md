@@ -76,7 +76,7 @@ The interceptor reads the token from `authorization`, `grpcgateway-authorization
 - **AUTH-01 (implemented):** Startup rejects missing/short/default signing keys outside explicit `APP_ENV=development`; dedicated keys require at least 32 bytes.
 - **AUTH-02 (implemented):** Protected requests and renewal verify persisted active session/account state. Logout blocks access and renewal for that session; renewal also checks the persisted refresh token.
 - **AUTH-03 (implemented):** Role grants require authentication and `manage_roles`; customer provisioning is transactional and first-admin bootstrap requires database-operator access. Anonymous grants are denied.
-- **AUTH-04 (proposed):** Rotate refresh tokens on renewal with replay detection; define revocation on password change and account deletion.
+- **AUTH-04 (implemented):** Rotate hashed refresh credentials atomically; replay revokes the session. Password changes revoke all sessions; account deletion removes sessions atomically. Existing sessions require login after migration 000014.
 
 **Acceptance:** Wrong credentials, expired/revoked sessions, and forged tokens fail. Logout prevents further renewal.
 
@@ -155,7 +155,7 @@ The interceptor reads the token from `authorization`, `grpcgateway-authorization
 
 **DATA-01:** PostgreSQL is authoritative. Capacity and room-conflict rules must be transactional.
 
-**DATA-02:** All migrations form one ordered stream in `service/mig/` (`000001`–`000013`). `service/schema/*.sql` is the committed sqlc source regenerated from DBML via `make dbsch`; keep it in step with migrations.
+**DATA-02:** All migrations form one ordered stream in `service/mig/` (`000001`–`000014`). `service/schema/*.sql` is the committed sqlc source regenerated from DBML via `make dbsch`; keep it in step with migrations.
 
 ## 12. Deployment, operations, and quality
 
@@ -165,7 +165,7 @@ Tooling: Go, Buf, sqlc, golang-migrate, PostgreSQL; Docker images locally/GitHub
 - **OPS-02:** Propagate gRPC startup failures to the process, close resources, shut down gracefully, and add readiness/liveness checks.
 - **OPS-03:** Define backup/restore and migration rollback procedures. Keep destructive teardown targets (`make teardn`) out of routine validation.
 - **OPS-04:** Keep the module list in sync across the Makefile `SVCS`, the Dockerfile sqlc loop, and `service.go`. `report` has no DB layer and is excluded from sqlc.
-- **OPS-05 (remaining):** Signing-secret references/provisioning and fail-closed migration init are implemented. Remaining work: align GHCR image references/pull policy with CI output; render raw ingress placeholders before kubectl apply; define production migration recovery/backup procedures; provision cert-manager/issuer prerequisites explicitly in GitLab. The current local templates and CI configuration do not implement these production deployment steps end-to-end. See [deployment prerequisites](k8s-setup/README.md#configure-before-deploying).
+- **OPS-05 (partial):** Shared local/remote rendering, immutable CI images, release migration gating, explicit cluster bootstrap, namespace deployment RBAC and disposable rollout acceptance are implemented. Production backup/restore automation, multi-provider release coordination and live hosting validation remain operational work. See [rendered releases](k8s-setup/RELEASES.md).
 - **QUALITY-01:** High availability, consistency, and low latency are design goals; no numeric SLOs exist. Establish them before adding caches, replication, or distributed services.
 
 ## 13. Verification and delivery
@@ -178,7 +178,7 @@ Tooling: Go, Buf, sqlc, golang-migrate, PostgreSQL; Docker images locally/GitHub
 
 **Remaining delivery priorities (completed hardening is in section 16):**
 
-1. **Hardening:** Add refresh rotation/replay detection, password-change revocation, audit history and consistent infrastructure-error sanitization; retain session/policy regression coverage.
+1. **Hardening:** Add audit history and consistent infrastructure-error sanitization; retain session/policy regression coverage.
 2. **Ownership and scope:** Extend current owner/system-admin checks into an explicit gym-scoped staff/tenant model (AUTHZ-01), including schedule/payment/report workflows.
 3. **Concurrency:** Preserve atomic booking/capacity constraints; add the policy-defined waitlist and schedule resource-conflict rules with concurrency tests.
 4. **Tests:** Extend existing assertion-based API, Go/Flutter and deployment-script tests for newly delivered workflows; avoid treating skipped environment tests as runtime evidence.
@@ -189,11 +189,11 @@ Each delivered module shall include contract/schema updates, migrations, permiss
 
 ## 14. Decisions still required
 
-- Single-gym versus multi-gym scope and ownership model.
+- Multi-gym scope is accepted; legacy ownership mapping and tenant implementation remain outstanding.
 - Contact requirements and uniqueness, verification, account deletion, and retention.
-- Token transport and refresh-token rotation; first-administrator bootstrap is now implemented.
-- Class lifecycle, minimum attendance, booking cutoffs, waitlist, and cancellation policies.
-- Room ownership, recurrence, scheduling timezone, and conflict resolution.
+- Persistent token transport; refresh rotation, password-change revocation and first-administrator bootstrap are implemented.
+- Implement the accepted class lifecycle, minimum-attendance warning, start-time cutoff and FIFO waitlist defaults recorded in the delivery ledger.
+- Implement gym-owned rooms, half-open conflict prevention and bounded timezone-aware recurrence from the delivery ledger.
 - Payment provider and refund policy; notification channels and preferences.
 - Report definitions, audit retention, supported clients, production hosting, and measurable SLOs.
 
@@ -221,8 +221,8 @@ Priorities: **P0** authorization/session integrity; **P1** correctness and opera
 | ROOM-01/02 | P1 conflicts, P2 recurrence; schedules have no room/resource identity or occurrence generation | Define resource ownership/model, add contract/schema/migrations and atomic overlap prevention. Decide timezone/recurrence policy before occurrence generation. | Same-resource overlaps cannot both commit; adjacent half-open intervals pass if adopted; concurrent tests and timezone/DST recurrence cases pass.  | Planned / requires decisions |
 | PAY-01, **PAY-02: settlement and financial lifecycle** | P1; create inserts ledger row; refund only changes status | Define amount/currency/refund rules and provider adapter, idempotency and verified settlement events. Restrict transitions/refunds and associate payment with the purchased booking/membership where required by the chosen product policy. | Retried requests cannot charge twice; pending rows cannot be treated as settled revenue; refunds require valid state/authority; provider failures cannot falsely record success.  | Planned / requires decisions |
 | NOTIFY-01, EVENT-01 | P2; inbox exists, event-triggered delivery does not | Choose channels/reminder policies; implement transactional outbox, preferences, delivery workers, retry and duplicate suppression; scope inbox/read/preferences by actor. | Booking/cancellation commits notification intent atomically; opted-out channels are respected; retries deliver at most one logical notification; users cannot inspect/modify others' inboxes.  | Partial; remaining scope in section 16 |
-| REPORT-01, **REPORT-02: measurable operational reporting** | P1; source counts non-refunded pending payments and global bookings; the attendance request has no date filters | Define timezone/status/currency/tenant metrics, filter attendance by requested dates, reconcile revenue with settled/refunded source records, and implement authorized attendance transitions. Depends on PAY-02 and lifecycle decisions. | Boundary/date/scoping fixtures reconcile with database; pending payments are excluded from settled revenue; currencies are not silently summed; completed/no-show totals are reachable and correct.  | Planned / requires decisions |
-| UI-01/04 | P2; no staff/admin management screens | Add trainer/owner classes, schedules, gym membership, payments/notification/report views as their workflows become usable; add admin role/permission/expiry UI after P0 authorization work. | Each supported actor completes its workflow through the browser; hidden controls do not replace server denial; screens cover loading/empty/error states.  | Planned / requires decisions |
+| REPORT-01, **REPORT-02: measurable operational reporting** | P1; source counts non-refunded pending payments and global bookings; the attendance request has no date filters | Define timezone/status/currency/tenant metrics, filter attendance by requested dates, reconcile revenue with settled/refunded source records, and implement authorized attendance transitions. Depends on PAY-02 and lifecycle decisions. | Boundary/date/scoping fixtures reconcile with database; pending payments are excluded from settled revenue; currencies are not silently summed; completed/no-show totals are reachable and correct.  | Partial: settled/currency/date corrections delivered; tenant/lifecycle reconciliation remains |
+| UI-01/04 | P2; no staff/admin management screens | Add trainer/owner classes, schedules, gym membership, payments/notification/report views as their workflows become usable; add admin role/permission/expiry UI after P0 authorization work. | Each supported actor completes its workflow through the browser; hidden controls do not replace server denial; screens cover loading/empty/error states.  | Partial: global administrator screens delivered; gym staff screens remain |
 | **QUALITY-03: smoke-client contract compatibility** | P1; canonical `go test ./...` fails in `service/cmd/grpcclt.go` | Replace the removed RenewAccessTokenClient helper with the declared RenewAccessToken RPC and use int32 IDs consistent with the protobuf contracts. Keep secrets out of client output. | The smoke client compiles after canonical generation; all packages pass compilation under `go test ./...`; renewal uses the declared request/response contract.  | Delivered; see section 16 |
 | **QUALITY-02: reproducible generated-code checks**, OPS-04 | P1; host generated files fail compilation, canonical container generation builds | Document/automate clean generation and checks without committing bindings; maintain module lists; run integration requirements and UI regression checks in a disposable environment and retain sanitized results. | Clean checkout builds after canonical generation; Go checks, protobuf lint and Flutter analysis have reported results; failed requirements remain visible and link to tasks, rather than being disabled.  | Delivered; see section 16 |
 
@@ -241,7 +241,7 @@ Implemented and covered by regression tests:
 
 Upgrade requirements: apply migrations `000012` and `000013`; review duplicate confirmed bookings and invalid class ranges/capacities before `000013` (the migration refuses invalid data rather than altering customer records). Configure a dedicated signing secret; old tokens require login. Provision the first administrator through the operator command, then use authenticated grants. No live deployment or database is changed automatically by this work.
 
-Still planned: refresh-token rotation/replay detection and password-change revocation; gym-scoped staff/tenant workflows; waitlists/class lifecycle/attendance; room/resource conflict and recurrence models; external payment settlement/refund rules; notification delivery/outbox/reminders; currency-aware/date-filtered report contracts; and missing trainer/owner/admin screens. These require the dependencies and product decisions already listed above and are not represented as completed by CRUD handlers.
+Still planned: gym-scoped staff/tenant workflows; waitlists/class lifecycle/attendance; room/resource conflict and recurrence models; external payment settlement/refund rules; notification delivery/outbox/reminders; tenant-scoped settlement/attendance reporting; and missing trainer/owner screens. Global administrator screens and currency/date report corrections are implemented; lifecycle/payment transitions remain separate work. These require the dependencies and product decisions already listed above and are not represented as completed by CRUD handlers.
 
 
 ## 17. Tooling and deployment documentation status (2026-10-31)
@@ -275,3 +275,9 @@ The [focused deployment improvement plan](docs/deployment-improvement-plan.md) d
 ## 20. Accepted multi-gym internal MVP
 
 The [delivery ledger](docs/mvp-delivery.md) records the accepted product defaults, ordered dependencies and acceptance evidence for the remaining requirements. Multi-gym scoped internal workflows are the implementation boundary; provider adapters do not imply live charges or external delivery. Requirement status changes only with recorded verification.
+
+## 21. Internal MVP implementation increments
+
+Delivered: shared rendered releases and fail-closed migration Jobs; explicit scoped deployment/bootstrap separation; real disposable rollout/RBAC/signing-key checks; refresh rotation/replay/password revocation; administrator-only user directory and authorization mutations; last-permanent-administrator guards; and browser role/permission/grant-expiry management.
+
+Report corrections count only `settled` payment rows, require a currency when a scalar total would otherwise mix currencies, validate RFC3339 ranges, and use exclusive end dates. Attendance filters by class start and counts no-shows. These remain global administrator reports, not completed tenant/cash-flow reporting. Activity fields use nonnegative minutes, calories and meters, with nonempty type/title. The remaining tenant, lifecycle, scheduling, outbox and settlement milestones remain visible in the delivery ledger.
