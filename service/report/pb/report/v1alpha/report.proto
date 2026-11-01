@@ -4,32 +4,41 @@ package report.v1alpha;
 
 import "google/api/annotations.proto";
 
-message GetDashboardRequest {}
+message GetDashboardRequest {
+    string currency = 1;
+}
 
 message GetDashboardResponse {
     int32 total_users = 1;
     int32 total_classes = 2;
     int32 total_bookings = 3;
     int64 total_revenue = 4;
+    string currency = 5;
 }
 
 message GetRevenueReportRequest {
     string start_date = 1;
     string end_date = 2;
+    string currency = 3;
 }
 
 message GetRevenueReportResponse {
     int64 total_revenue = 1;
     int32 payment_count = 2;
+    string currency = 3;
 }
 
-message GetAttendanceReportRequest {}
+message GetAttendanceReportRequest {
+    string start_date = 1;
+    string end_date = 2;
+}
 
 message GetAttendanceReportResponse {
     int32 total_bookings = 1;
     int32 confirmed = 2;
     int32 cancelled = 3;
     int32 completed = 4;
+    int32 no_show = 5;
 }
 
 service ReportService {
