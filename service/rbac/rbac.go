@@ -346,6 +346,21 @@ func (s *ImRBACServiceServer) UpdatePermission(ctx context.Context, req *UpdateP
 		return nil, err
 	}
 
+	var reserved bool
+	if err := s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM rbac.role_permission rp JOIN rbac.role r ON r.id=rp.role_id WHERE rp.permission_id=$1 AND r.name='super_admin')`, req.GetId()).Scan(&reserved); err != nil {
+		return nil, status.Error(codes.Internal, "check system permission")
+	}
+
+	if reserved {
+		existing, err := s.q.GetPermission(ctx, req.GetId())
+		if err != nil {
+			return nil, status.Error(codes.Internal, "read system permission")
+		}
+		if existing.Name != req.GetName() || existing.Resource != req.GetResource() || existing.Action != req.GetAction() {
+			return nil, status.Error(codes.FailedPrecondition, "system permission identities are reserved")
+		}
+	}
+
 	log.Println("UpdatePermission request:", req)
 
 	err := s.q.UpdatePermission(ctx, UpdatePermissionParams{
@@ -382,6 +397,15 @@ func (s *ImRBACServiceServer) UpdatePermission(ctx context.Context, req *UpdateP
 func (s *ImRBACServiceServer) DeletePermission(ctx context.Context, req *DeletePermissionRequest) (*DeletePermissionResponse, error) {
 	if err := middleware.RequireOwnerOrAdmin(ctx, s.db, 0); err != nil {
 		return nil, err
+	}
+
+	var reserved bool
+	if err := s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM rbac.role_permission rp JOIN rbac.role r ON r.id=rp.role_id WHERE rp.permission_id=$1 AND r.name='super_admin')`, req.GetId()).Scan(&reserved); err != nil {
+		return nil, status.Error(codes.Internal, "check system permission")
+	}
+
+	if reserved {
+		return nil, status.Error(codes.FailedPrecondition, "system permissions cannot be deleted")
 	}
 
 	log.Println("DeletePermission request:", req)

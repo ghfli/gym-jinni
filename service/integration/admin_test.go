@@ -91,3 +91,19 @@ func TestAdministratorDirectoryAndContinuity(t *testing.T) {
 	}
 
 }
+
+func TestSystemPermissionIdentityIsReserved(t *testing.T) {
+	s := setup(t)
+	admin := s.user()
+	s.role(admin, "super_admin")
+	var id int
+	var name, resource, action string
+	if err := s.db.QueryRow(`SELECT id,name,resource,action FROM rbac.permission WHERE name='manage_roles'`).Scan(&id, &name, &resource, &action); err != nil {
+		t.Fatal(err)
+	}
+	path := fmt.Sprintf("/v1/permissions/%d", id)
+	s.expect("PUT", path, admin.token, map[string]string{"name": "renamed_system_permission", "resource": resource, "action": action}, 400)
+	s.expect("DELETE", path, admin.token, nil, 400)
+	s.expect("PUT", path, admin.token, map[string]string{"name": name, "resource": resource, "action": action, "description": "System role administration"}, 200)
+	s.expect("GET", "/v1/users", admin.token, nil, 200)
+}
