@@ -57,8 +57,9 @@ void main() {
   testWidgets('user directory pagination and denied responses are visible',
       (tester) async {
     final client = MockClient((req) async {
-      if (req.url.queryParameters['offset'] == '50')
+      if (req.url.queryParameters['offset'] == '50') {
         return response({'message': 'Access revoked'}, 403);
+      }
       return response({
         'users': [
           {'id': 1, 'name': 'First', 'email': 'first@example.com'}
@@ -84,12 +85,13 @@ void main() {
         return response(
             {'message': 'Keep another permanent administrator'}, 400);
       }
-      if (req.url.path == '/v1/roles')
+      if (req.url.path == '/v1/roles') {
         return response({
           'roles': [
             {'id': 1, 'name': 'super_admin'}
           ]
         });
+      }
       return response({'userRoles': []});
     });
     await tester.pumpWidget(harness(
