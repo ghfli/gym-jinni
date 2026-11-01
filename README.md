@@ -76,3 +76,5 @@ GitHub builds on pushes/PRs to `main`, `master`, and `csr`; non-PR runs publish 
 ## Contributing
 
 Read [AGENTS.md](AGENTS.md) and the specification before changing contracts, migrations or permissions. Keep commits focused and report actual verification results and limitations. Contact `newstart.infotech@gmail.com` or the project Slack at [gymjinni.slack.com](https://gymjinni.slack.com) for project discussions.
+
+System administrator bootstrap and browser management are documented in [system administration](docs/system-administration.md).

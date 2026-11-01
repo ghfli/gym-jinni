@@ -26,7 +26,7 @@ From `ui/`, run `flutter pub get`, `flutter run -d chrome --dart-define=API_BASE
 
 ## Coding Style & Naming Conventions
 
-Format Go with `gofmt` (tabs) and Dart with `dart format lib test` (two-space indentation). Use lowercase Go package names, exported `PascalCase` identifiers, and Dart `snake_case.dart` filenames. Run `flutter analyze`; lint rules come from `flutter_lints`. Edit protobuf, DBML, and SQL sources rather than generated bindings. Add numbered migration pairs after the current `000013` migration, for example `000014_description.up.sql` and `.down.sql`. Review existing duplicates/invalid data before applying booking-integrity migration `000013`. When adding a module, add it to `SVCS` in the Makefile, the Dockerfile's sqlc loop, and register it in both functions of `service.go`.
+Format Go with `gofmt` (tabs) and Dart with `dart format lib test` (two-space indentation). Use lowercase Go package names, exported `PascalCase` identifiers, and Dart `snake_case.dart` filenames. Run `flutter analyze`; lint rules come from `flutter_lints`. Edit protobuf, DBML, and SQL sources rather than generated bindings. Add numbered migration pairs after the current migration sequence, for example `000015_description.up.sql` and `.down.sql`. Review existing duplicates/invalid data before applying booking-integrity migration `000013`. When adding a module, add it to `SVCS` in the Makefile, the Dockerfile's sqlc loop, and register it in both functions of `service.go`.
 
 ## Testing Guidelines
 
@@ -40,7 +40,7 @@ History uses short, descriptive subjects such as `adjust setup-alx.sh`; no stric
 
 GitHub Actions builds on pushes/PRs to `main`, `master`, and `csr`; only non-PR runs publish images. Deployment requires a manual workflow run on `main`/`master` with the `deploy` input enabled and a base64 `KUBECONFIG` secret for a reachable cluster. Native Node.js 24 actions are used; no runtime-forcing flag is needed. GitLab deployment is also manual. Deployment guard tests: install pinned `k8s-setup/tests/requirements.txt` in a Python test environment, then run `python3 -m unittest discover -s k8s-setup/tests -v` from the root. Real startup/migration checks and conditional recovery are documented in [migration recovery](k8s-setup/MIGRATION_RECOVERY.md).
 
-The Flutter UI has Register/Login and Home, Classes, Bookings, Activity, Profile tabs. Super administrators currently manage roles/permissions and other operational features through the API; no admin screens exist. Keep [spec.md](spec.md) and [validation report](docs/business-process-validation.md) aligned with implemented versus planned behavior; preserve dated historical results as historical evidence.
+The Flutter UI has Register/Login and Home, Classes, Bookings, Activity, Profile tabs. Active super administrators also have a Management destination for the paged user directory, role grants/expiry and role/permission management. See [system administration](docs/system-administration.md); gym-scoped staff screens remain planned. Keep [spec.md](spec.md) and [validation report](docs/business-process-validation.md) aligned with implemented versus planned behavior; preserve dated historical results as historical evidence.
 
 Node.js is optional host tooling, not a backend/Flutter runtime dependency. Keep shared instructions independent of individual machines and installation paths. See [optional tooling](docs/development.md#optional-nodejs-tooling); CI action runtimes are specified in the workflow.
 

@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 
 import 'api_config.dart';
 import 'auth_state.dart';
+import 'management_page.dart';
 
 void main() {
   runApp(
@@ -62,6 +63,33 @@ class AppShell extends StatefulWidget {
 
 class _AppShellState extends State<AppShell> {
   int _idx = 0;
+  bool _isAdmin = false;
+  String? _capabilityError;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCapabilities();
+  }
+
+  Future<void> _loadCapabilities() async {
+    try {
+      final user = context.read<AuthState>().userId;
+      final result =
+          await managementRequest(context, 'GET', '/v1/users/$user/roles');
+      if (!mounted) return;
+      setState(() {
+        _isAdmin = (result['roles'] as List? ?? [])
+            .any((role) => role['name'] == 'super_admin');
+        _capabilityError = null;
+        if (!_isAdmin && _idx >= _pages.length) _idx = 0;
+      });
+    } catch (error) {
+      if (mounted) {
+        setState(() => _capabilityError = 'Could not load management access');
+      }
+    }
+  }
 
   void _switchTo(int idx) => setState(() => _idx = idx);
 
@@ -76,31 +104,44 @@ class _AppShellState extends State<AppShell> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: IndexedStack(index: _idx, children: _pages),
+      body: Column(children: [
+        if (_capabilityError != null)
+          MaterialBanner(content: Text(_capabilityError!), actions: [
+            TextButton(onPressed: _loadCapabilities, child: const Text('Retry'))
+          ]),
+        Expanded(
+            child: IndexedStack(
+                index: _idx,
+                children: [..._pages, if (_isAdmin) const ManagementPage()])),
+      ]),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _idx,
         onDestinationSelected: (i) => setState(() => _idx = i),
-        destinations: const [
-          NavigationDestination(
+        destinations: [
+          const NavigationDestination(
               icon: Icon(Icons.home_outlined),
               selectedIcon: Icon(Icons.home),
               label: 'Home'),
-          NavigationDestination(
+          const NavigationDestination(
               icon: Icon(Icons.fitness_center_outlined),
               selectedIcon: Icon(Icons.fitness_center),
               label: 'Classes'),
-          NavigationDestination(
+          const NavigationDestination(
               icon: Icon(Icons.calendar_today_outlined),
               selectedIcon: Icon(Icons.calendar_today),
               label: 'Bookings'),
-          NavigationDestination(
+          const NavigationDestination(
               icon: Icon(Icons.directions_run_outlined),
               selectedIcon: Icon(Icons.directions_run),
               label: 'Activity'),
-          NavigationDestination(
+          const NavigationDestination(
               icon: Icon(Icons.person_outline),
               selectedIcon: Icon(Icons.person),
               label: 'Profile'),
+          if (_isAdmin)
+            const NavigationDestination(
+                icon: Icon(Icons.admin_panel_settings_outlined),
+                label: 'Management'),
         ],
       ),
     );
