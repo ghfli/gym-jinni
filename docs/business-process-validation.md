@@ -67,25 +67,25 @@ The nginx image also maps `/api/` and `/rbac/` to the gateway root; e.g. `/api/v
 | [payment](../service/payment/pb/payment/v1alpha/payment.proto) | `GET /v1/payments/{id}` | `GetPayment` | JWT + `view_payment` | API only |
 | [payment](../service/payment/pb/payment/v1alpha/payment.proto) | `GET /v1/users/{user_id}/payments` | `ListPayments` | JWT + `view_payment` | API only |
 | [payment](../service/payment/pb/payment/v1alpha/payment.proto) | `POST /v1/payments/{id}/refund` | `RefundPayment` | JWT + `manage_payment` | API only |
-| [rbac](../service/rbac/pb/rbac/v1alpha/rbac.proto) | `POST /v1/roles` | `CreateRole` | JWT + `manage_roles` | API only |
+| [rbac](../service/rbac/pb/rbac/v1alpha/rbac.proto) | `POST /v1/roles` | `CreateRole` | JWT + `manage_roles` | Management / Roles |
 | [rbac](../service/rbac/pb/rbac/v1alpha/rbac.proto) | `GET /v1/roles/{id}` | `GetRole` | JWT + `view_roles` | API only |
 | [rbac](../service/rbac/pb/rbac/v1alpha/rbac.proto) | `GET /v1/roles/by-name/{name}` | `GetRoleByName` | Public | API only |
-| [rbac](../service/rbac/pb/rbac/v1alpha/rbac.proto) | `GET /v1/roles` | `ListRoles` | JWT + `view_roles` | API only |
-| [rbac](../service/rbac/pb/rbac/v1alpha/rbac.proto) | `PUT /v1/roles/{id}` | `UpdateRole` | JWT + `manage_roles` | API only |
-| [rbac](../service/rbac/pb/rbac/v1alpha/rbac.proto) | `DELETE /v1/roles/{id}` | `DeleteRole` | JWT + `manage_roles` | API only |
-| [rbac](../service/rbac/pb/rbac/v1alpha/rbac.proto) | `POST /v1/permissions` | `CreatePermission` | JWT + `manage_permissions` | API only |
+| [rbac](../service/rbac/pb/rbac/v1alpha/rbac.proto) | `GET /v1/roles` | `ListRoles` | JWT + `view_roles` | Management / Roles |
+| [rbac](../service/rbac/pb/rbac/v1alpha/rbac.proto) | `PUT /v1/roles/{id}` | `UpdateRole` | JWT + `manage_roles` | Management / Roles |
+| [rbac](../service/rbac/pb/rbac/v1alpha/rbac.proto) | `DELETE /v1/roles/{id}` | `DeleteRole` | JWT + `manage_roles` | Management / Roles |
+| [rbac](../service/rbac/pb/rbac/v1alpha/rbac.proto) | `POST /v1/permissions` | `CreatePermission` | JWT + `manage_permissions` | Management / Permissions |
 | [rbac](../service/rbac/pb/rbac/v1alpha/rbac.proto) | `GET /v1/permissions/{id}` | `GetPermission` | JWT + `view_permissions` | API only |
 | [rbac](../service/rbac/pb/rbac/v1alpha/rbac.proto) | `GET /v1/permissions/by-name/{name}` | `GetPermissionByName` | JWT + `view_permissions` | API only |
-| [rbac](../service/rbac/pb/rbac/v1alpha/rbac.proto) | `GET /v1/permissions` | `ListPermissions` | JWT + `view_permissions` | API only |
-| [rbac](../service/rbac/pb/rbac/v1alpha/rbac.proto) | `PUT /v1/permissions/{id}` | `UpdatePermission` | JWT + `manage_permissions` | API only |
-| [rbac](../service/rbac/pb/rbac/v1alpha/rbac.proto) | `DELETE /v1/permissions/{id}` | `DeletePermission` | JWT + `manage_permissions` | API only |
-| [rbac](../service/rbac/pb/rbac/v1alpha/rbac.proto) | `POST /v1/roles/{role_id}/permissions/{permission_id}` | `AssignPermissionToRole` | JWT + `manage_roles` | API only |
-| [rbac](../service/rbac/pb/rbac/v1alpha/rbac.proto) | `DELETE /v1/roles/{role_id}/permissions/{permission_id}` | `RevokePermissionFromRole` | JWT + `manage_roles` | API only |
-| [rbac](../service/rbac/pb/rbac/v1alpha/rbac.proto) | `GET /v1/roles/{role_id}/permissions` | `GetRolePermissions` | JWT + `view_roles` | API only |
-| [rbac](../service/rbac/pb/rbac/v1alpha/rbac.proto) | `POST /v1/users/{user_id}/roles/{role_id}` | `AssignRoleToUser` | JWT + `manage_roles` | API only |
-| [rbac](../service/rbac/pb/rbac/v1alpha/rbac.proto) | `DELETE /v1/users/{user_id}/roles/{role_id}` | `RevokeRoleFromUser` | JWT + `manage_roles` | API only |
+| [rbac](../service/rbac/pb/rbac/v1alpha/rbac.proto) | `GET /v1/permissions` | `ListPermissions` | JWT + `view_permissions` | Management / Permissions |
+| [rbac](../service/rbac/pb/rbac/v1alpha/rbac.proto) | `PUT /v1/permissions/{id}` | `UpdatePermission` | JWT + `manage_permissions` | Management / Permissions |
+| [rbac](../service/rbac/pb/rbac/v1alpha/rbac.proto) | `DELETE /v1/permissions/{id}` | `DeletePermission` | JWT + `manage_permissions` | Management / Permissions |
+| [rbac](../service/rbac/pb/rbac/v1alpha/rbac.proto) | `POST /v1/roles/{role_id}/permissions/{permission_id}` | `AssignPermissionToRole` | JWT + `manage_roles` | Management / Roles |
+| [rbac](../service/rbac/pb/rbac/v1alpha/rbac.proto) | `DELETE /v1/roles/{role_id}/permissions/{permission_id}` | `RevokePermissionFromRole` | JWT + `manage_roles` | Management / Roles |
+| [rbac](../service/rbac/pb/rbac/v1alpha/rbac.proto) | `GET /v1/roles/{role_id}/permissions` | `GetRolePermissions` | JWT + `view_roles` | Management / Roles |
+| [rbac](../service/rbac/pb/rbac/v1alpha/rbac.proto) | `POST /v1/users/{user_id}/roles/{role_id}` | `AssignRoleToUser` | JWT + `manage_roles` | Management / Users |
+| [rbac](../service/rbac/pb/rbac/v1alpha/rbac.proto) | `DELETE /v1/users/{user_id}/roles/{role_id}` | `RevokeRoleFromUser` | JWT + `manage_roles` | Management / Users |
 | [rbac](../service/rbac/pb/rbac/v1alpha/rbac.proto) | `GET /v1/users/{user_id}/roles` | `GetUserRoles` | JWT + owner/admin scope | API only |
-| [rbac](../service/rbac/pb/rbac/v1alpha/rbac.proto) | `GET /v1/users/{user_id}/role-details` | `GetUserRoleDetails` | JWT + owner/admin scope | API only |
+| [rbac](../service/rbac/pb/rbac/v1alpha/rbac.proto) | `GET /v1/users/{user_id}/role-details` | `GetUserRoleDetails` | JWT + owner/admin scope | Management / Users |
 | [rbac](../service/rbac/pb/rbac/v1alpha/rbac.proto) | `GET /v1/roles/{role_id}/users` | `GetUsersWithRole` | JWT + `view_roles` | API only |
 | [rbac](../service/rbac/pb/rbac/v1alpha/rbac.proto) | `POST /v1/check-permission` | `CheckPermission` | JWT | API only |
 | [rbac](../service/rbac/pb/rbac/v1alpha/rbac.proto) | `POST /v1/check-permission-by-resource-action` | `CheckPermissionByResourceAction` | JWT | API only |
