@@ -27,6 +27,23 @@ class RenderReleaseTests(unittest.TestCase):
         self.assertEqual('gym.example.com', ingress['spec']['rules'][0]['host'])
         self.assertIn('/v1', [p['path'] for p in ingress['spec']['rules'][0]['http']['paths']])
 
+    def test_job_provisions_admin_after_migrations_from_optional_secret(self):
+        for profile, args in (('local', ()), ('remote', ('ghcr.io/o/s:abcdef1234', 'ghcr.io/o/u:abcdef1234'))):
+            with self.subTest(profile=profile):
+                spec = module.render(profile, 'gym.example.com', *args)['migration.yml'][0]['spec']['template']['spec']
+                self.assertEqual(['wait-for-postgres', 'run-migrations'], [c['name'] for c in spec['initContainers']])
+                admin = spec['containers'][0]
+                self.assertEqual('bootstrap-admin', admin['name'])
+                self.assertEqual(spec['initContainers'][1]['image'], admin['image'])
+                self.assertIn('-from-env', admin['args'][0])
+                volume = spec['volumes'][0]['secret']
+                self.assertEqual(('gym-jinni-admin', True, 0o400), (volume['secretName'], volume['optional'], volume['defaultMode']))
+                self.assertEqual('/etc/gym-jinni-admin/config',
+                                 next(e for e in admin['env'] if e['name'] == 'ADMIN_CONFIG_FILE')['value'])
+                if profile == 'remote':
+                    db = next(e for e in admin['env'] if e['name'] == 'DBURL')
+                    self.assertEqual('postgres-secret', db['valueFrom']['secretKeyRef']['name'])
+
     def test_local_profile_retains_imported_images(self):
         docs = module.render('local', 'localhost')
         self.assertEqual('Secret', docs['foundation.yml'][0]['kind'])

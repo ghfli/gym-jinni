@@ -138,7 +138,7 @@ def main():
             migration_file = root / 'migration.yml'
             job = yaml.safe_load(migration_file.read_text())
             job['metadata']['name'] += '-failure'
-            job['spec']['template']['spec']['containers'][0]['args'] = ['exit 17']
+            next(c for c in job['spec']['template']['spec']['initContainers'] if c['name'] == 'run-migrations')['args'] = ['exit 17']
             migration_file.write_text(yaml.safe_dump(job))
             applications = list(yaml.safe_load_all((root / 'application.yml').read_text()))
             deployment = next(d for d in applications if d['kind'] == 'Deployment' and d['metadata']['name'] == 'main-service')

@@ -42,8 +42,20 @@ def render(profile, domain, service_image=None, ui_image=None, pull_secret=None)
     pod = next(x for x in backend if x['kind'] == 'Deployment')['spec']['template']['spec']
     migration = copy.deepcopy(next(x for x in pod['initContainers'] if x['name'] == 'run-migrations'))
     pod['initContainers'] = [x for x in pod['initContainers'] if x['name'] != 'run-migrations']
+    # Optional administrator provisioning runs after migrations, once per release. The Secret
+    # gym-jinni-admin (key: config, KEY=VALUE lines) is created by the operator; without it
+    # the step is a no-op. See RELEASES.md.
+    bootstrap = copy.deepcopy(migration)
+    bootstrap['name'] = 'bootstrap-admin'
+    bootstrap['args'] = [
+        'if [ -f "$ADMIN_CONFIG_FILE" ]; then exec /app/service/bootstrap-admin -from-env; '
+        'else echo "No administrator config mounted; skipping"; fi']
+    bootstrap['env'].append({'name': 'ADMIN_CONFIG_FILE', 'value': '/etc/gym-jinni-admin/config'})
+    bootstrap['volumeMounts'] = [{'name': 'admin-config', 'mountPath': '/etc/gym-jinni-admin', 'readOnly': True}]
+    admin_volume = {'name': 'admin-config', 'secret': {'secretName': 'gym-jinni-admin', 'optional': True,
+                                                         'defaultMode': 0o400}}
     ui_pod = next(x for x in ui if x['kind'] == 'Deployment')['spec']['template']['spec']
-    for container, image in ((pod['containers'][0], service_image), (migration, service_image),
+    for container, image in ((pod['containers'][0], service_image), (migration, service_image), (bootstrap, service_image),
                              (ui_pod['containers'][0], ui_image)):
         container['image'] = image
         container['imagePullPolicy'] = 'Never' if profile == 'local' else 'IfNotPresent'
@@ -55,11 +67,14 @@ def render(profile, domain, service_image=None, ui_image=None, pull_secret=None)
     # Credentials are provisioned separately for a remote deployment.
     if profile == 'remote':
         config[0]['data'].pop('DBURL', None)
-        for container in (pod['containers'][0], migration):
+        for container in (pod['containers'][0], migration, bootstrap):
             next(x for x in container['env'] if x['name'] == 'DBURL')['valueFrom'] = {
                 'secretKeyRef': {'name': 'postgres-secret', 'key': 'DBURL', 'optional': False}}
-    job_pod = {'restartPolicy': 'Never', 'initContainers': copy.deepcopy(pod['initContainers']),
-               'containers': [migration]}
+    # Init containers run in order: wait for PostgreSQL, migrate, then the main container
+    # provisions the administrator. A failed migration fails the Job and blocks rollout.
+    job_pod = {'restartPolicy': 'Never',
+               'initContainers': copy.deepcopy(pod['initContainers']) + [migration],
+               'containers': [bootstrap], 'volumes': [admin_volume]}
     if pull_secret:
         for spec in (pod, ui_pod, job_pod):
             spec['imagePullSecrets'] = [{'name': pull_secret}]

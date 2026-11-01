@@ -30,6 +30,7 @@ RUN for s in user class rbac booking gym schedule payment notification activity;
 
 RUN go test ./...
 RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o /out/service .
+RUN CGO_ENABLED=0 GOOS=linux go build -o /out/bootstrap-admin ./cmd/bootstrap-admin
 
 FROM docker.io/library/alpine:3.23
 RUN apk add --no-cache ca-certificates bash curl \
@@ -38,6 +39,7 @@ RUN apk add --no-cache ca-certificates bash curl \
   && chmod +x /usr/local/bin/migrate
 WORKDIR /app/service
 COPY --from=builder /out/service /app/service/service
+COPY --from=builder /out/bootstrap-admin /app/service/bootstrap-admin
 COPY service/mig/ /app/service/mig/
 EXPOSE 8080 8081
 ENV DBURL="postgresql://root:gj@postgres:5432/gj?sslmode=disable&search_path=public"
