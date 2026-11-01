@@ -6,6 +6,7 @@ import (
 	"github.com/ghfli/gym-jinni/service/middleware"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	. "github.com/ghfli/gym-jinni/service/gen/go/activity/v1alpha"
@@ -75,6 +76,9 @@ func activityToProto(a ActivityActivity) *Activity {
 func (s *ImActivityServiceServer) LogActivity(ctx context.Context, req *LogActivityRequest) (*LogActivityResponse, error) {
 	if err := middleware.RequireOwnerOrAdmin(ctx, s.db, req.GetUserId()); err != nil {
 		return nil, err
+	}
+	if strings.TrimSpace(req.GetActivityType()) == "" || strings.TrimSpace(req.GetTitle()) == "" || req.GetDurationMinutes() < 0 || req.GetCalories() < 0 || req.GetDistanceMeters() < 0 || req.GetGymId() < 0 {
+		return nil, status.Error(codes.InvalidArgument, "activity type/title are required; minutes, calories and distance in meters must be nonnegative")
 	}
 	log.Printf("LogActivity: user=%d type=%s title=%s", req.GetUserId(), req.GetActivityType(), req.GetTitle())
 
