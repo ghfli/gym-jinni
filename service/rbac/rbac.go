@@ -70,6 +70,10 @@ func nullTimeToDateTime(nt sql.NullTime) *datetime.DateTime {
 // Role Management
 
 func (s *ImRBACServiceServer) CreateRole(ctx context.Context, req *CreateRoleRequest) (*CreateRoleResponse, error) {
+	if err := middleware.RequireOwnerOrAdmin(ctx, s.db, 0); err != nil {
+		return nil, err
+	}
+
 	log.Println("CreateRole request:", req)
 
 	role, err := s.q.CreateRole(ctx, CreateRoleParams{
@@ -152,9 +156,29 @@ func (s *ImRBACServiceServer) ListRoles(ctx context.Context, req *ListRolesReque
 }
 
 func (s *ImRBACServiceServer) UpdateRole(ctx context.Context, req *UpdateRoleRequest) (*UpdateRoleResponse, error) {
+	if err := middleware.RequireOwnerOrAdmin(ctx, s.db, 0); err != nil {
+		return nil, err
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, status.Error(codes.Internal, "begin administrator change")
+	}
+	defer tx.Rollback()
+	if err := middleware.LockAdministrators(ctx, tx); err != nil {
+		return nil, err
+	}
+
+	var roleName string
+	if err := tx.QueryRowContext(ctx, `SELECT name FROM rbac.role WHERE id=$1`, req.GetId()).Scan(&roleName); err != nil {
+		return nil, status.Error(codes.NotFound, "role not found")
+	}
+	if roleName == "super_admin" {
+		return nil, status.Error(codes.FailedPrecondition, "the system administrator role is reserved")
+	}
+
 	log.Println("UpdateRole request:", req)
 
-	err := s.q.UpdateRole(ctx, UpdateRoleParams{
+	err = s.q.WithTx(tx).UpdateRole(ctx, UpdateRoleParams{
 		ID:          req.Id,
 		Name:        req.Name,
 		Description: sql.NullString{String: req.Description, Valid: req.Description != ""},
@@ -165,12 +189,15 @@ func (s *ImRBACServiceServer) UpdateRole(ctx context.Context, req *UpdateRoleReq
 	}
 
 	// Fetch updated role
-	role, err := s.q.GetRole(ctx, req.Id)
+	role, err := s.q.WithTx(tx).GetRole(ctx, req.Id)
 	if err != nil {
 		log.Println("Failed to fetch updated role:", err)
 		return nil, err
 	}
 
+	if err := tx.Commit(); err != nil {
+		return nil, status.Error(codes.Internal, "commit administrator change")
+	}
 	return &UpdateRoleResponse{
 		Role: &Role{
 			Id:          role.ID,
@@ -182,20 +209,47 @@ func (s *ImRBACServiceServer) UpdateRole(ctx context.Context, req *UpdateRoleReq
 }
 
 func (s *ImRBACServiceServer) DeleteRole(ctx context.Context, req *DeleteRoleRequest) (*DeleteRoleResponse, error) {
+	if err := middleware.RequireOwnerOrAdmin(ctx, s.db, 0); err != nil {
+		return nil, err
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, status.Error(codes.Internal, "begin administrator change")
+	}
+	defer tx.Rollback()
+	if err := middleware.LockAdministrators(ctx, tx); err != nil {
+		return nil, err
+	}
+
+	var roleName string
+	if err := tx.QueryRowContext(ctx, `SELECT name FROM rbac.role WHERE id=$1`, req.GetId()).Scan(&roleName); err != nil {
+		return nil, status.Error(codes.NotFound, "role not found")
+	}
+	if roleName == "super_admin" {
+		return nil, status.Error(codes.FailedPrecondition, "the system administrator role is reserved")
+	}
+
 	log.Println("DeleteRole request:", req)
 
-	err := s.q.DeleteRole(ctx, req.Id)
+	err = s.q.WithTx(tx).DeleteRole(ctx, req.Id)
 	if err != nil {
 		log.Println("Failed to DeleteRole:", err)
 		return &DeleteRoleResponse{Success: false}, err
 	}
 
+	if err := tx.Commit(); err != nil {
+		return nil, status.Error(codes.Internal, "commit administrator change")
+	}
 	return &DeleteRoleResponse{Success: true}, nil
 }
 
 // Permission Management
 
 func (s *ImRBACServiceServer) CreatePermission(ctx context.Context, req *CreatePermissionRequest) (*CreatePermissionResponse, error) {
+	if err := middleware.RequireOwnerOrAdmin(ctx, s.db, 0); err != nil {
+		return nil, err
+	}
+
 	log.Println("CreatePermission request:", req)
 
 	permission, err := s.q.CreatePermission(ctx, CreatePermissionParams{
@@ -288,6 +342,10 @@ func (s *ImRBACServiceServer) ListPermissions(ctx context.Context, req *ListPerm
 }
 
 func (s *ImRBACServiceServer) UpdatePermission(ctx context.Context, req *UpdatePermissionRequest) (*UpdatePermissionResponse, error) {
+	if err := middleware.RequireOwnerOrAdmin(ctx, s.db, 0); err != nil {
+		return nil, err
+	}
+
 	log.Println("UpdatePermission request:", req)
 
 	err := s.q.UpdatePermission(ctx, UpdatePermissionParams{
@@ -322,6 +380,10 @@ func (s *ImRBACServiceServer) UpdatePermission(ctx context.Context, req *UpdateP
 }
 
 func (s *ImRBACServiceServer) DeletePermission(ctx context.Context, req *DeletePermissionRequest) (*DeletePermissionResponse, error) {
+	if err := middleware.RequireOwnerOrAdmin(ctx, s.db, 0); err != nil {
+		return nil, err
+	}
+
 	log.Println("DeletePermission request:", req)
 
 	err := s.q.DeletePermission(ctx, req.Id)
@@ -336,6 +398,10 @@ func (s *ImRBACServiceServer) DeletePermission(ctx context.Context, req *DeleteP
 // Role-Permission Assignment
 
 func (s *ImRBACServiceServer) AssignPermissionToRole(ctx context.Context, req *AssignPermissionToRoleRequest) (*AssignPermissionToRoleResponse, error) {
+	if err := middleware.RequireOwnerOrAdmin(ctx, s.db, 0); err != nil {
+		return nil, err
+	}
+
 	log.Println("AssignPermissionToRole request:", req)
 
 	err := s.q.AssignPermissionToRole(ctx, AssignPermissionToRoleParams{
@@ -351,6 +417,17 @@ func (s *ImRBACServiceServer) AssignPermissionToRole(ctx context.Context, req *A
 }
 
 func (s *ImRBACServiceServer) RevokePermissionFromRole(ctx context.Context, req *RevokePermissionFromRoleRequest) (*RevokePermissionFromRoleResponse, error) {
+	if err := middleware.RequireOwnerOrAdmin(ctx, s.db, 0); err != nil {
+		return nil, err
+	}
+
+	var reserved bool
+	if err := s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM rbac.role WHERE id=$1 AND name='super_admin')`, req.GetRoleId()).Scan(&reserved); err != nil {
+		return nil, status.Error(codes.Internal, "check reserved role")
+	}
+	if reserved {
+		return nil, status.Error(codes.FailedPrecondition, "system administrator permissions are reserved")
+	}
 	log.Println("RevokePermissionFromRole request:", req)
 
 	err := s.q.RevokePermissionFromRole(ctx, RevokePermissionFromRoleParams{
@@ -392,6 +469,29 @@ func (s *ImRBACServiceServer) GetRolePermissions(ctx context.Context, req *GetRo
 // User-Role Assignment
 
 func (s *ImRBACServiceServer) AssignRoleToUser(ctx context.Context, req *AssignRoleToUserRequest) (*AssignRoleToUserResponse, error) {
+	if err := middleware.RequireOwnerOrAdmin(ctx, s.db, 0); err != nil {
+		return nil, err
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, status.Error(codes.Internal, "begin administrator change")
+	}
+	defer tx.Rollback()
+	if err := middleware.LockAdministrators(ctx, tx); err != nil {
+		return nil, err
+	}
+
+	var roleName string
+	if err := tx.QueryRowContext(ctx, `SELECT name FROM rbac.role WHERE id=$1`, req.GetRoleId()).Scan(&roleName); err != nil {
+		return nil, status.Error(codes.NotFound, "role not found")
+	}
+
+	if roleName == "super_admin" && req.GetExpiresAt() != nil {
+		if err := middleware.ProtectAdministrator(ctx, tx, req.GetUserId()); err != nil {
+			return nil, err
+		}
+	}
+
 	actor, err := middleware.GetUserIDFromContext(ctx)
 	if err != nil {
 		return nil, err
@@ -408,13 +508,17 @@ func (s *ImRBACServiceServer) AssignRoleToUser(ctx context.Context, req *AssignR
 
 	var expiresAt sql.NullTime
 	if req.ExpiresAt != nil {
+		expires := dateTimeToTime(req.ExpiresAt)
+		if !expires.After(time.Now()) || expires.Year() != int(req.ExpiresAt.Year) || int(expires.Month()) != int(req.ExpiresAt.Month) || expires.Day() != int(req.ExpiresAt.Day) || req.ExpiresAt.Hours < 0 || req.ExpiresAt.Hours > 23 || req.ExpiresAt.Minutes < 0 || req.ExpiresAt.Minutes > 59 || req.ExpiresAt.Seconds < 0 || req.ExpiresAt.Seconds > 59 || req.ExpiresAt.Nanos < 0 || req.ExpiresAt.Nanos > 999999999 || req.ExpiresAt.TimeOffset != nil {
+			return nil, status.Error(codes.InvalidArgument, "expiry must be a valid future UTC date without an offset")
+		}
 		expiresAt = sql.NullTime{
 			Time:  dateTimeToTime(req.ExpiresAt),
 			Valid: true,
 		}
 	}
 
-	err = s.q.AssignRoleToUser(ctx, AssignRoleToUserParams{
+	err = s.q.WithTx(tx).AssignRoleToUser(ctx, AssignRoleToUserParams{
 		UserID:    req.UserId,
 		RoleID:    req.RoleId,
 		GrantedBy: sql.NullInt32{Int32: req.GrantedBy, Valid: req.GrantedBy > 0},
@@ -425,13 +529,39 @@ func (s *ImRBACServiceServer) AssignRoleToUser(ctx context.Context, req *AssignR
 		return &AssignRoleToUserResponse{Success: false}, err
 	}
 
+	if err := tx.Commit(); err != nil {
+		return nil, status.Error(codes.Internal, "commit administrator change")
+	}
 	return &AssignRoleToUserResponse{Success: true}, nil
 }
 
 func (s *ImRBACServiceServer) RevokeRoleFromUser(ctx context.Context, req *RevokeRoleFromUserRequest) (*RevokeRoleFromUserResponse, error) {
+	if err := middleware.RequireOwnerOrAdmin(ctx, s.db, 0); err != nil {
+		return nil, err
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, status.Error(codes.Internal, "begin administrator change")
+	}
+	defer tx.Rollback()
+	if err := middleware.LockAdministrators(ctx, tx); err != nil {
+		return nil, err
+	}
+
+	var roleName string
+	if err := tx.QueryRowContext(ctx, `SELECT name FROM rbac.role WHERE id=$1`, req.GetRoleId()).Scan(&roleName); err != nil {
+		return nil, status.Error(codes.NotFound, "role not found")
+	}
+
+	if roleName == "super_admin" {
+		if err := middleware.ProtectAdministrator(ctx, tx, req.GetUserId()); err != nil {
+			return nil, err
+		}
+	}
+
 	log.Println("RevokeRoleFromUser request:", req)
 
-	err := s.q.RevokeRoleFromUser(ctx, RevokeRoleFromUserParams{
+	err = s.q.WithTx(tx).RevokeRoleFromUser(ctx, RevokeRoleFromUserParams{
 		UserID: req.UserId,
 		RoleID: req.RoleId,
 	})
@@ -440,6 +570,9 @@ func (s *ImRBACServiceServer) RevokeRoleFromUser(ctx context.Context, req *Revok
 		return &RevokeRoleFromUserResponse{Success: false}, err
 	}
 
+	if err := tx.Commit(); err != nil {
+		return nil, status.Error(codes.Internal, "commit administrator change")
+	}
 	return &RevokeRoleFromUserResponse{Success: true}, nil
 }
 

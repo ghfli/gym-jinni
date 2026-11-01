@@ -2,6 +2,7 @@ package middleware
 
 // PermissionMapping maps gRPC method names to required permissions
 var PermissionMapping = map[string]string{
+	"/user.v1alpha.UserService/ListUsers": "",
 	// User service methods (from existing service)
 	"/user.v1alpha.UserService/CreateUser":       "create_user",
 	"/user.v1alpha.UserService/GetUser":          "",

@@ -452,6 +452,19 @@ func (s *ImUserServiceServer) DeleteUser(ctx context.Context,
 		return nil, status.Error(codes.Internal, "begin account deletion")
 	}
 	defer tx.Rollback()
+	if err := middleware.LockAdministrators(ctx, tx); err != nil {
+		return nil, err
+	}
+	var lockedID int32
+	if err := tx.QueryRowContext(ctx, `SELECT id FROM "user"."user" WHERE id=$1 FOR UPDATE`, u.GetId()).Scan(&lockedID); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, status.Error(codes.NotFound, "user not found")
+		}
+		return nil, status.Error(codes.Internal, "lock account")
+	}
+	if err := middleware.ProtectAdministrator(ctx, tx, u.GetId()); err != nil {
+		return nil, err
+	}
 	for _, query := range []string{`DELETE FROM "user".session WHERE user_id=$1`, `DELETE FROM rbac.user_role WHERE user_id=$1`, `DELETE FROM "user".trainer_profile WHERE user_id=$1`} {
 		if _, err := tx.ExecContext(ctx, query, u.GetId()); err != nil {
 			return nil, status.Error(codes.Internal, "prepare account deletion")
@@ -526,4 +539,38 @@ func (s *ImUserServiceServer) ValidateSession(ctx context.Context, claims *auth.
 		return status.Error(codes.Unauthenticated, "session expired or revoked")
 	}
 	return nil
+}
+
+func (s *ImUserServiceServer) ListUsers(ctx context.Context, req *ListUsersRequest) (*ListUsersResponse, error) {
+	if err := middleware.RequireOwnerOrAdmin(ctx, s.db, 0); err != nil {
+		return nil, err
+	}
+	size := req.GetPageSize()
+	if size == 0 {
+		size = 50
+	}
+	if size < 1 || size > 200 || req.GetOffset() < 0 {
+		return nil, status.Error(codes.InvalidArgument, "page_size must be 1-200 and offset nonnegative")
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT id, coalesce(email,''), coalesce(phone,''), name FROM "user"."user" ORDER BY id LIMIT $1 OFFSET $2`, size+1, req.GetOffset())
+	if err != nil {
+		return nil, status.Error(codes.Internal, "list users")
+	}
+	defer rows.Close()
+	result := &ListUsersResponse{}
+	for rows.Next() {
+		var user User
+		if err := rows.Scan(&user.Id, &user.Email, &user.Phone, &user.Name); err != nil {
+			return nil, status.Error(codes.Internal, "read users")
+		}
+		if len(result.Users) == int(size) {
+			result.NextOffset = req.GetOffset() + size
+			break
+		}
+		result.Users = append(result.Users, &user)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, status.Error(codes.Internal, "read users")
+	}
+	return result, nil
 }

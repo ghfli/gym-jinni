@@ -93,7 +93,20 @@ message RenewAccessTokenResponse {
     google.type.DateTime refresh_tkn_exp_at = 4;
 }
 
+message ListUsersRequest {
+    int32 page_size = 1;
+    int32 offset = 2;
+}
+
+message ListUsersResponse {
+    repeated User users = 1;
+    int32 next_offset = 2;
+}
+
 service UserService {
+    rpc ListUsers(ListUsersRequest) returns (ListUsersResponse) {
+        option (google.api.http) = {get: "/v1/users"};
+    }
 
     rpc CreateUser (CreateUserRequest) returns (CreateUserResponse) {
         option (google.api.http) = {
